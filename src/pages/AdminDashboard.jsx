@@ -36,7 +36,14 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedPlace, setSelectedPlace] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const navigate = useNavigate();
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth < 768);
+    window.addEventListener("resize", handleResize);
+    return () => window.removeEventListener("resize", handleResize);
+  }, []);
 
   useEffect(() => { checkAdmin(); loadData(); }, []);
 
@@ -222,29 +229,34 @@ export default function AdminDashboard() {
 
   return (
     <div style={s.page}>
-      {/* Sidebar - قائمة جانبية */}
-      <div style={{ ...s.sidebar, transform: sidebarOpen ? "translateX(0)" : "translateX(-100%)" }}>
-        <div style={s.sidebarHeader}>
-          <h2 style={s.sidebarLogo}>Nudge</h2>
-          <button style={s.closeSidebarBtn} onClick={() => setSidebarOpen(false)}>✕</button>
+      {/* Sidebar - قائمة جانبية للسطح المكتب، وفي الموبايل تظهر كـ overlay */}
+      {(isMobile ? sidebarOpen : true) && (
+        <div style={isMobile ? s.sidebarMobileOverlay : s.sidebarDesktop}>
+          {isMobile && <div style={s.sidebarBackdrop} onClick={() => setSidebarOpen(false)} />}
+          <div style={s.sidebarContent}>
+            <div style={s.sidebarHeader}>
+              <h2 style={s.sidebarLogo}>Nudge</h2>
+              {isMobile && <button style={s.closeSidebarBtn} onClick={() => setSidebarOpen(false)}>✕</button>}
+            </div>
+            {tabs.map(tab => (
+              <button
+                key={tab.key}
+                style={activeTab === tab.key ? s.sidebarItemActive : s.sidebarItem}
+                onClick={() => { setActiveTab(tab.key); if (isMobile) setSidebarOpen(false); }}
+              >
+                <OutlineIcon active={activeTab === tab.key} />
+                {tab.label}
+              </button>
+            ))}
+            <div style={s.sidebarFooter}>
+              <button style={s.sidebarLogout} onClick={handleLogout}>خروج</button>
+            </div>
+          </div>
         </div>
-        {tabs.map(tab => (
-          <button
-            key={tab.key}
-            style={activeTab === tab.key ? s.sidebarItemActive : s.sidebarItem}
-            onClick={() => { setActiveTab(tab.key); setSidebarOpen(false); }}
-          >
-            <OutlineIcon active={activeTab === tab.key} />
-            {tab.label}
-          </button>
-        ))}
-        <div style={s.sidebarFooter}>
-          <button style={s.sidebarLogout} onClick={handleLogout}>خروج</button>
-        </div>
-      </div>
+      )}
 
       {/* Main content */}
-      <div style={s.main}>
+      <div style={isMobile ? s.mainMobile : s.mainDesktop}>
         <div style={s.topBar}>
           <button style={s.menuBtn} onClick={() => setSidebarOpen(true)}>☰</button>
           <h1 style={s.topBarTitle}>لوحة التحكم</h1>
@@ -570,26 +582,39 @@ export default function AdminDashboard() {
 
 const s = {
   page: { minHeight: "100vh", backgroundColor: "#f5f5f5", display: "flex", direction: "rtl" },
-  sidebar: { position: "fixed", top: 0, right: 0, width: "260px", height: "100vh", backgroundColor: "#fff", borderLeft: "1px solid #e0e0e0", padding: "20px 0", display: "flex", flexDirection: "column", zIndex: 1000, transition: "transform 0.3s ease", transform: "translateX(0)", boxShadow: "-2px 0 8px rgba(0,0,0,0.05)" },
-  sidebarHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 20px 20px", borderBottom: "1px solid #eee", marginBottom: "20px" },
+  
+  // Sidebar styles - desktop
+  sidebarDesktop: { position: "fixed", top: 0, right: 0, width: "260px", height: "100vh", zIndex: 100, borderLeft: "1px solid #e0e0e0", backgroundColor: "#fff", boxShadow: "-2px 0 8px rgba(0,0,0,0.05)" },
+  sidebarContent: { display: "flex", flexDirection: "column", height: "100%" },
+  sidebarHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px", borderBottom: "1px solid #eee" },
   sidebarLogo: { fontSize: "22px", fontWeight: "900", color: "#000", margin: 0 },
   closeSidebarBtn: { background: "none", border: "none", fontSize: "20px", cursor: "pointer", padding: "4px 8px", borderRadius: "8px" },
   sidebarItem: { display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", padding: "12px 20px", backgroundColor: "transparent", border: "none", fontSize: "14px", fontWeight: "600", color: "#000", cursor: "pointer", textAlign: "right", transition: "0.2s" },
   sidebarItemActive: { display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", padding: "12px 20px", backgroundColor: "#000", border: "none", fontSize: "14px", fontWeight: "600", color: "#fff", cursor: "pointer", textAlign: "right", transition: "0.2s" },
   sidebarFooter: { marginTop: "auto", padding: "20px", borderTop: "1px solid #eee" },
   sidebarLogout: { width: "100%", padding: "10px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: "600" },
-  main: { flex: 1, marginRight: "260px", width: "calc(100% - 260px)", transition: "margin 0.3s ease" },
+  
+  // Sidebar mobile overlay
+  sidebarMobileOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, display: "flex", justifyContent: "flex-end" },
+  sidebarBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)" },
+  sidebarContentMobile: { position: "relative", width: "260px", height: "100%", backgroundColor: "#fff", boxShadow: "-2px 0 8px rgba(0,0,0,0.1)", zIndex: 1001 },
+  
+  mainDesktop: { flex: 1, marginRight: "260px", width: "calc(100% - 260px)" },
+  mainMobile: { flex: 1, width: "100%" },
+  
   topBar: { backgroundColor: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e0e0e0", position: "sticky", top: 0, zIndex: 99 },
   menuBtn: { display: "none", fontSize: "24px", background: "none", border: "none", cursor: "pointer" },
   topBarTitle: { fontSize: "20px", fontWeight: "700", color: "#000", margin: 0 },
   topBarRefresh: { padding: "8px 16px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
-  content: { padding: "24px", maxWidth: "1200px", margin: "0 auto" },
+  
+  content: { padding: "24px", maxWidth: "1200px", margin: "0 auto", width: "100%", boxSizing: "border-box" },
+  
   statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px", marginBottom: "24px" },
   statCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "20px", textAlign: "center" },
   statN: { fontSize: "28px", fontWeight: "900", marginBottom: "4px" },
   statL: { fontSize: "12px", opacity: 0.7 },
   statsRow: { display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" },
-  miniStat: { flex: 1, backgroundColor: "#f5f5f5", borderRadius: "8px", padding: "10px", textAlign: "center" },
+  miniStat: { flex: "1 1 80px", backgroundColor: "#f5f5f5", borderRadius: "8px", padding: "10px", textAlign: "center" },
   miniN: { fontSize: "18px", fontWeight: "900", color: "#000" },
   miniL: { fontSize: "11px", color: "#666" },
   card: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "16px", marginBottom: "10px" },
@@ -597,7 +622,7 @@ const s = {
   cardMain: { fontSize: "15px", fontWeight: "700", color: "#000" },
   cardSub: { fontSize: "13px", color: "#666" },
   cardDate: { fontSize: "11px", color: "#999" },
-  otpCode: { fontSize: "24px", fontWeight: "900", letterSpacing: "8px", color: "#000" },
+  otpCode: { fontSize: "24px", fontWeight: "900", letterSpacing: "8px", color: "#000", wordBreak: "break-all" },
   savedBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
   typeBadge: { backgroundColor: "#f0f0f0", color: "#000", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
   activeBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
@@ -616,12 +641,12 @@ const s = {
   insightTitle: { fontSize: "14px", fontWeight: "700", marginBottom: "8px" },
   insightText: { fontSize: "13px", opacity: 0.8, marginBottom: "4px" },
   chartCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", marginBottom: "12px", overflowX: "auto" },
-  chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap" },
-  rangeButtons: { display: "flex", gap: "6px" },
+  chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" },
+  rangeButtons: { display: "flex", gap: "6px", flexWrap: "wrap" },
   range: { padding: "4px 12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
   activeRange: { padding: "4px 12px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
   chartWrapper: { width: "100%", overflowX: "auto" },
-  chart: { display: "flex", alignItems: "flex-end", gap: "4px", height: "120px", minWidth: "100%" },
+  chart: { display: "flex", alignItems: "flex-end", gap: "4px", height: "120px", minWidth: "280px" },
   chartCol: { flex: "0 0 auto", minWidth: "20px", display: "flex", flexDirection: "column", alignItems: "center", height: "100%", cursor: "pointer" },
   barWrapper: { flex: 1, display: "flex", alignItems: "flex-end", width: "100%" },
   bar: { width: "100%", backgroundColor: "#000", borderRadius: "4px 4px 0 0", minHeight: "2px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
@@ -630,12 +655,12 @@ const s = {
   chartFooter: { display: "flex", justifyContent: "space-between", marginTop: "4px" },
   chartFooterText: { fontSize: "11px", color: "#999" },
   subTitle: { fontSize: "13px", fontWeight: "700", color: "#000", marginBottom: "12px" },
-  itemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap" },
+  itemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap", gap: "8px" },
   itemName: { fontSize: "13px", color: "#000", flex: 1 },
   itemRight: { display: "flex", alignItems: "center", gap: "8px" },
   itemBar: { height: "6px", backgroundColor: "#000", borderRadius: "3px", maxWidth: "80px" },
   itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "50px", textAlign: "left" },
-  userRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap" },
+  userRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap", gap: "12px" },
   userName: { fontSize: "14px", fontWeight: "700", color: "#000" },
   userPhone: { fontSize: "12px", color: "#666" },
   userFav: { fontSize: "11px", color: "#999", marginTop: "2px" },
@@ -648,13 +673,18 @@ const s = {
   activeTab: { padding: "10px 14px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
 };
 
-// استجابة للشاشات الصغيرة
-const mediaQuery = "@media (max-width: 768px)";
-s[mediaQuery] = {
-  sidebar: { transform: "translateX(-100%)" },
-  main: { marginRight: "0", width: "100%" },
-  menuBtn: { display: "block" },
-  topBar: { padding: "12px 16px" },
-  content: { padding: "16px" },
-  statsGrid: { gridTemplateColumns: "1fr 1fr" },
-};
+// التجاوب عبر media queries (يتم تطبيقها عبر JavaScript ولكن نضيفها يدوياً)
+if (typeof window !== "undefined") {
+  const styleTag = document.createElement("style");
+  styleTag.textContent = `
+    @media (max-width: 768px) {
+      .menu-btn { display: block; }
+      .sidebar-desktop { display: none; }
+    }
+    @media (min-width: 769px) {
+      .menu-btn { display: none; }
+      .sidebar-mobile-overlay { display: none; }
+    }
+  `;
+  document.head.appendChild(styleTag);
+}
