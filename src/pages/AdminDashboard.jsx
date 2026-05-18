@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
-// أيقونة دائرية مفرغة (أبيض من الداخل، أسود من الخارج)
+// أيقونة دائرية مفرغة (أبيض من الداخل، أسود من الخارج) للقائمة
 const OutlineIcon = ({ active = false }) => (
   <span
     style={{
@@ -36,11 +36,12 @@ export default function AdminDashboard() {
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedPlace, setSelectedPlace] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isMobile, setIsMobile] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     const handleResize = () => setIsMobile(window.innerWidth < 768);
+    handleResize();
     window.addEventListener("resize", handleResize);
     return () => window.removeEventListener("resize", handleResize);
   }, []);
@@ -229,7 +230,7 @@ export default function AdminDashboard() {
 
   return (
     <div style={s.page}>
-      {/* Sidebar - قائمة جانبية للسطح المكتب، وفي الموبايل تظهر كـ overlay */}
+      {/* القائمة الجانبية - تنزلق من اليمين في الموبايل */}
       {(isMobile ? sidebarOpen : true) && (
         <div style={isMobile ? s.sidebarMobileOverlay : s.sidebarDesktop}>
           {isMobile && <div style={s.sidebarBackdrop} onClick={() => setSidebarOpen(false)} />}
@@ -255,15 +256,19 @@ export default function AdminDashboard() {
         </div>
       )}
 
-      {/* Main content */}
+      {/* المحتوى الرئيسي */}
       <div style={isMobile ? s.mainMobile : s.mainDesktop}>
         <div style={s.topBar}>
-          <button style={s.menuBtn} onClick={() => setSidebarOpen(true)}>☰</button>
+          {/* أيقونة هامبرغر (ثلاث شرزط) تظهر فقط في الموبايل */}
+          {isMobile && (
+            <button style={s.hamburgerBtn} onClick={() => setSidebarOpen(true)}>☰</button>
+          )}
           <h1 style={s.topBarTitle}>لوحة التحكم</h1>
           <button style={s.topBarRefresh} onClick={loadData}>⟳ تحديث</button>
         </div>
 
         <div style={s.content}>
+          {/* نفس المحتوى السابق دون تغيير - كل التبويبات */}
           {activeTab === "overview" && (
             <div>
               <div style={s.statsGrid}>
@@ -580,10 +585,11 @@ export default function AdminDashboard() {
   );
 }
 
+// الأنماط الكاملة مع تحسينات للموبايل
 const s = {
   page: { minHeight: "100vh", backgroundColor: "#f5f5f5", display: "flex", direction: "rtl" },
-  
-  // Sidebar styles - desktop
+
+  // Sidebar desktop
   sidebarDesktop: { position: "fixed", top: 0, right: 0, width: "260px", height: "100vh", zIndex: 100, borderLeft: "1px solid #e0e0e0", backgroundColor: "#fff", boxShadow: "-2px 0 8px rgba(0,0,0,0.05)" },
   sidebarContent: { display: "flex", flexDirection: "column", height: "100%" },
   sidebarHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "20px", borderBottom: "1px solid #eee" },
@@ -593,73 +599,73 @@ const s = {
   sidebarItemActive: { display: "flex", alignItems: "center", justifyContent: "flex-start", width: "100%", padding: "12px 20px", backgroundColor: "#000", border: "none", fontSize: "14px", fontWeight: "600", color: "#fff", cursor: "pointer", textAlign: "right", transition: "0.2s" },
   sidebarFooter: { marginTop: "auto", padding: "20px", borderTop: "1px solid #eee" },
   sidebarLogout: { width: "100%", padding: "10px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "14px", fontWeight: "600" },
-  
+
   // Sidebar mobile overlay
   sidebarMobileOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, display: "flex", justifyContent: "flex-end" },
   sidebarBackdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)" },
-  sidebarContentMobile: { position: "relative", width: "260px", height: "100%", backgroundColor: "#fff", boxShadow: "-2px 0 8px rgba(0,0,0,0.1)", zIndex: 1001 },
-  
+  // reuse sidebarContent for mobile as well
+
   mainDesktop: { flex: 1, marginRight: "260px", width: "calc(100% - 260px)" },
   mainMobile: { flex: 1, width: "100%" },
-  
-  topBar: { backgroundColor: "#fff", padding: "16px 24px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e0e0e0", position: "sticky", top: 0, zIndex: 99 },
-  menuBtn: { display: "none", fontSize: "24px", background: "none", border: "none", cursor: "pointer" },
-  topBarTitle: { fontSize: "20px", fontWeight: "700", color: "#000", margin: 0 },
-  topBarRefresh: { padding: "8px 16px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
-  
-  content: { padding: "24px", maxWidth: "1200px", margin: "0 auto", width: "100%", boxSizing: "border-box" },
-  
-  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "12px", marginBottom: "24px" },
-  statCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "20px", textAlign: "center" },
-  statN: { fontSize: "28px", fontWeight: "900", marginBottom: "4px" },
-  statL: { fontSize: "12px", opacity: 0.7 },
+
+  topBar: { backgroundColor: "#fff", padding: "12px 16px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #e0e0e0", position: "sticky", top: 0, zIndex: 99 },
+  hamburgerBtn: { background: "none", border: "none", fontSize: "28px", cursor: "pointer", padding: "8px", marginLeft: "8px", color: "#000", lineHeight: 1 },
+  topBarTitle: { fontSize: "18px", fontWeight: "700", color: "#000", margin: 0, flex: 1, textAlign: "center" },
+  topBarRefresh: { padding: "6px 12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
+
+  content: { padding: "16px", maxWidth: "1200px", margin: "0 auto", width: "100%", boxSizing: "border-box" },
+
+  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(140px, 1fr))", gap: "12px", marginBottom: "24px" },
+  statCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "16px", textAlign: "center" },
+  statN: { fontSize: "24px", fontWeight: "900", marginBottom: "4px" },
+  statL: { fontSize: "11px", opacity: 0.7 },
   statsRow: { display: "flex", gap: "8px", marginTop: "12px", flexWrap: "wrap" },
-  miniStat: { flex: "1 1 80px", backgroundColor: "#f5f5f5", borderRadius: "8px", padding: "10px", textAlign: "center" },
-  miniN: { fontSize: "18px", fontWeight: "900", color: "#000" },
-  miniL: { fontSize: "11px", color: "#666" },
-  card: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "16px", marginBottom: "10px" },
+  miniStat: { flex: "1 1 70px", backgroundColor: "#f5f5f5", borderRadius: "8px", padding: "8px", textAlign: "center" },
+  miniN: { fontSize: "16px", fontWeight: "900", color: "#000" },
+  miniL: { fontSize: "10px", color: "#666" },
+  card: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "14px", marginBottom: "12px" },
   cardRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "6px", flexWrap: "wrap", gap: "8px" },
   cardMain: { fontSize: "15px", fontWeight: "700", color: "#000" },
-  cardSub: { fontSize: "13px", color: "#666" },
-  cardDate: { fontSize: "11px", color: "#999" },
-  otpCode: { fontSize: "24px", fontWeight: "900", letterSpacing: "8px", color: "#000", wordBreak: "break-all" },
-  savedBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
-  typeBadge: { backgroundColor: "#f0f0f0", color: "#000", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
-  activeBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
-  inactiveBadge: { backgroundColor: "#f0f0f0", color: "#666", padding: "4px 10px", borderRadius: "20px", fontSize: "12px", fontWeight: "600" },
-  addCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "24px", marginBottom: "16px" },
+  cardSub: { fontSize: "12px", color: "#666" },
+  cardDate: { fontSize: "10px", color: "#999" },
+  otpCode: { fontSize: "20px", fontWeight: "900", letterSpacing: "4px", color: "#000", wordBreak: "break-all" },
+  savedBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: "600" },
+  typeBadge: { backgroundColor: "#f0f0f0", color: "#000", padding: "4px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: "600" },
+  activeBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: "600" },
+  inactiveBadge: { backgroundColor: "#f0f0f0", color: "#666", padding: "4px 10px", borderRadius: "20px", fontSize: "11px", fontWeight: "600" },
+  addCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", marginBottom: "16px" },
   sectionTitle: { fontSize: "16px", fontWeight: "700", color: "#000", marginBottom: "16px" },
   label: { fontSize: "13px", fontWeight: "600", color: "#000", marginBottom: "6px", display: "block" },
-  input: { width: "100%", padding: "12px 16px", border: "1.5px solid #000", borderRadius: "10px", fontSize: "14px", marginBottom: "12px", outline: "none", textAlign: "right", boxSizing: "border-box", backgroundColor: "#fff" },
+  input: { width: "100%", padding: "12px 14px", border: "1.5px solid #000", borderRadius: "10px", fontSize: "14px", marginBottom: "12px", outline: "none", textAlign: "right", boxSizing: "border-box", backgroundColor: "#fff" },
   btn: { width: "100%", padding: "14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "700", cursor: "pointer" },
   deleteBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px", marginTop: "8px" },
   toggleBtn: { padding: "6px 14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px" },
   empty: { textAlign: "center", padding: "40px", color: "#666" },
   placeSelector: { display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" },
   analyticsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap" },
-  insightCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "12px" },
+  insightCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "14px", marginBottom: "12px" },
   insightTitle: { fontSize: "14px", fontWeight: "700", marginBottom: "8px" },
-  insightText: { fontSize: "13px", opacity: 0.8, marginBottom: "4px" },
-  chartCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", marginBottom: "12px", overflowX: "auto" },
+  insightText: { fontSize: "12px", opacity: 0.8, marginBottom: "4px" },
+  chartCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "16px", marginBottom: "12px", overflowX: "auto" },
   chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px", flexWrap: "wrap", gap: "8px" },
   rangeButtons: { display: "flex", gap: "6px", flexWrap: "wrap" },
-  range: { padding: "4px 12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
-  activeRange: { padding: "4px 12px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
+  range: { padding: "4px 10px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "11px" },
+  activeRange: { padding: "4px 10px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "11px" },
   chartWrapper: { width: "100%", overflowX: "auto" },
   chart: { display: "flex", alignItems: "flex-end", gap: "4px", height: "120px", minWidth: "280px" },
-  chartCol: { flex: "0 0 auto", minWidth: "20px", display: "flex", flexDirection: "column", alignItems: "center", height: "100%", cursor: "pointer" },
+  chartCol: { flex: "0 0 auto", minWidth: "18px", display: "flex", flexDirection: "column", alignItems: "center", height: "100%", cursor: "pointer" },
   barWrapper: { flex: 1, display: "flex", alignItems: "flex-end", width: "100%" },
   bar: { width: "100%", backgroundColor: "#000", borderRadius: "4px 4px 0 0", minHeight: "2px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
-  barLabel: { fontSize: "9px", color: "#fff", marginTop: "2px" },
-  chartDay: { fontSize: "9px", color: "#666", marginTop: "2px" },
+  barLabel: { fontSize: "8px", color: "#fff", marginTop: "2px" },
+  chartDay: { fontSize: "8px", color: "#666", marginTop: "2px" },
   chartFooter: { display: "flex", justifyContent: "space-between", marginTop: "4px" },
-  chartFooterText: { fontSize: "11px", color: "#999" },
+  chartFooterText: { fontSize: "10px", color: "#999" },
   subTitle: { fontSize: "13px", fontWeight: "700", color: "#000", marginBottom: "12px" },
   itemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap", gap: "8px" },
   itemName: { fontSize: "13px", color: "#000", flex: 1 },
   itemRight: { display: "flex", alignItems: "center", gap: "8px" },
   itemBar: { height: "6px", backgroundColor: "#000", borderRadius: "3px", maxWidth: "80px" },
-  itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "50px", textAlign: "left" },
+  itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "45px", textAlign: "left" },
   userRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f5f5f5", flexWrap: "wrap", gap: "12px" },
   userName: { fontSize: "14px", fontWeight: "700", color: "#000" },
   userPhone: { fontSize: "12px", color: "#666" },
@@ -669,21 +675,21 @@ const s = {
   notifMessage: { fontSize: "14px", color: "#000", margin: "8px 0", fontWeight: "600" },
   sentBtn: { marginTop: "8px", padding: "8px 16px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px" },
   ruleActions: { marginBottom: "16px" },
-  tab: { padding: "10px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
-  activeTab: { padding: "10px 14px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
+  tab: { padding: "8px 12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
+  activeTab: { padding: "8px 12px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
 };
 
-// التجاوب عبر media queries (يتم تطبيقها عبر JavaScript ولكن نضيفها يدوياً)
+// إضافة media query عن طريق JS للتأكد من أن sidebar content mobile يستخدم نفس محتوى desktop
 if (typeof window !== "undefined") {
   const styleTag = document.createElement("style");
   styleTag.textContent = `
     @media (max-width: 768px) {
-      .menu-btn { display: block; }
       .sidebar-desktop { display: none; }
+      .sidebar-content-mobile { position: relative; width: 260px; height: 100%; background: #fff; box-shadow: -2px 0 8px rgba(0,0,0,0.1); z-index: 1001; }
     }
     @media (min-width: 769px) {
-      .menu-btn { display: none; }
       .sidebar-mobile-overlay { display: none; }
+      .hamburger-btn { display: none; }
     }
   `;
   document.head.appendChild(styleTag);
