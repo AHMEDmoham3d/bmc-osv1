@@ -1,16 +1,17 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
 export default function AdminDashboard() {
   const [otps, setOtps] = useState([]);
   const [users, setUsers] = useState([]);
-  const [visits, setVisits] = useState([]);
   const [places, setPlaces] = useState([]);
   const [orders, setOrders] = useState([]);
   const [rules, setRules] = useState([]);
+  const [notifications, setNotifications] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
+  const [chartRange, setChartRange] = useState("week");
   const [newPlace, setNewPlace] = useState({ name: "", type: "restaurant", cashier_code: "", discount_amount: "", commission: "10" });
   const [newRule, setNewRule] = useState({ rule_type: "inactive", days_inactive: "", min_visits: "", message: "" });
   const [selectedUser, setSelectedUser] = useState("");
@@ -25,20 +26,31 @@ export default function AdminDashboard() {
   }
 
   async function loadData() {
-    const [o, u, v, p, or, r] = await Promise.all([
+    const [o, u, p, or, r, n] = await Promise.all([
       supabase.from("otps").select("*").eq("used", false).order("created_at", { ascending: false }),
       supabase.from("users").select("*").order("created_at", { ascending: false }),
-      supabase.from("visits").select("*, users(name, phone), places(name, type)").order("created_at", { ascending: false }),
       supabase.from("places").select("*").order("created_at", { ascending: false }),
       supabase.from("orders").select("*, users(name, phone), places(name, type)").order("created_at", { ascending: false }),
       supabase.from("smart_rules").select("*").order("created_at", { ascending: false }),
+      supabase.from("notifications").select("*, users(name, phone)").eq("sent", false).order("created_at", { ascending: false }),
     ]);
     setOtps(o.data || []);
     setUsers(u.data || []);
-    setVisits(v.data || []);
     setPlaces(p.data || []);
     setOrders(or.data || []);
     setRules(r.data || []);
+    setNotifications(n.data || []);
+  }
+
+  async function runSmartRules() {
+    await supabase.rpc("check_smart_rules");
+    loadData();
+    alert("تم تشغيل Smart Rules");
+  }
+
+  async function markNotificationSent(id) {
+    await supabase.from("notifications").update({ sent: true }).eq("id", id);
+    loadData();
   }
 
   async function handleLogout() {
@@ -108,37 +120,65 @@ export default function AdminDashboard() {
     return type;
   }
 
-  function getPlaceStats(placeId) {
-    const placeOrders = orders.filter(o => o.place_id === placeId);
-    const place = places.find(p => p.id === placeId);
-    const commission = place?.commission || 10;
-    const totalRevenue = placeOrders.length * commission;
-    const uniqueUsers = [...new Set(placeOrders.map(o => o.user_id))].length;
-    return { totalOrders: placeOrders.length, totalRevenue, uniqueUsers };
+  function getChartData(placeOrders) {
+    const now = new Date();
+    let days = [];
+
+    if (chartRange === "week") {
+      days = Array.from({ length: 7 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (6 - i));
+        return d.toISOString().split("T")[0];
+      });
+    } else if (chartRange === "month") {
+      days = Array.from({ length: 30 }, (_, i) => {
+        const d = new Date(now);
+        d.setDate(d.getDate() - (29 - i));
+        return d.toISOString().split("T")[0];
+      });
+    } else if (chartRange === "all") {
+      if (placeOrders.length === 0) return [];
+      const firstDate = new Date(placeOrders[placeOrders.length - 1].created_at);
+      const diffDays = Math.ceil((now - firstDate) / (1000 * 60 * 60 * 24));
+      days = Array.from({ length: diffDays + 1 }, (_, i) => {
+        const d = new Date(firstDate);
+        d.setDate(d.getDate() + i);
+        return d.toISOString().split("T")[0];
+      });
+    }
+
+    return days.map(day => ({
+      day: chartRange === "all" && days.length > 30 ? day.slice(5) : day.slice(5),
+      fullDate: day,
+      count: placeOrders.filter(o => o.created_at?.startsWith(day)).length,
+    }));
   }
 
   function getPlaceAnalytics(placeId) {
     const placeOrders = orders.filter(o => o.place_id === placeId);
     const uniqueUserIds = [...new Set(placeOrders.map(o => o.user_id))];
     const itemCounts = placeOrders.reduce((acc, o) => {
-      acc[o.item] = (acc[o.item] || 0) + 1;
+      if (o.item) acc[o.item] = (acc[o.item] || 0) + 1;
       return acc;
     }, {});
     const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+    const chartData = getChartData(placeOrders);
+    const totalRevenue = placeOrders.length * (places.find(p => p.id === placeId)?.commission || 10);
 
-    // بيانات الجراف - آخر 7 أيام
-    const last7Days = Array.from({ length: 7 }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() - (6 - i));
-      return d.toISOString().split("T")[0];
-    });
+    // أوقات الذروة
+    const hourCounts = placeOrders.reduce((acc, o) => {
+      const hour = new Date(o.created_at).getHours();
+      acc[hour] = (acc[hour] || 0) + 1;
+      return acc;
+    }, {});
+    const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0];
 
-    const dailyCounts = last7Days.map(day => ({
-      day: day.slice(5),
-      count: placeOrders.filter(o => o.created_at?.startsWith(day)).length,
-    }));
+    // معدل الرجوع
+    const returningUsers = uniqueUserIds.filter(uid =>
+      placeOrders.filter(o => o.user_id === uid).length > 1
+    ).length;
 
-    return { placeOrders, uniqueUserIds, sortedItems, dailyCounts };
+    return { placeOrders, uniqueUserIds, sortedItems, chartData, totalRevenue, peakHour, returningUsers };
   }
 
   const totalRevenue = orders.reduce((sum, o) => {
@@ -150,6 +190,7 @@ export default function AdminDashboard() {
   const tabs = [
     { key: "overview", label: "نظرة عامة" },
     { key: "analytics", label: "تحليلات" },
+    { key: "notifications", label: `إشعارات (${notifications.length})` },
     { key: "otps", label: `OTPs (${otps.length})` },
     { key: "users", label: `المستخدمين (${users.length})` },
     { key: "orders", label: `الطلبات (${orders.length})` },
@@ -159,7 +200,7 @@ export default function AdminDashboard() {
   ];
 
   const selectedPlaceAnalytics = selectedPlaceId ? getPlaceAnalytics(selectedPlaceId) : null;
-  const maxDailyCount = selectedPlaceAnalytics ? Math.max(...selectedPlaceAnalytics.dailyCounts.map(d => d.count), 1) : 1;
+  const maxCount = selectedPlaceAnalytics ? Math.max(...selectedPlaceAnalytics.chartData.map(d => d.count), 1) : 1;
 
   return (
     <div style={s.page}>
@@ -183,12 +224,17 @@ export default function AdminDashboard() {
             <div style={s.statsGrid}>
               <div style={s.statCard}><p style={s.statN}>{users.length}</p><p style={s.statL}>مستخدم</p></div>
               <div style={s.statCard}><p style={s.statN}>{orders.length}</p><p style={s.statL}>طلب</p></div>
-              <div style={s.statCard}><p style={s.statN}>{totalRevenue}</p><p style={s.statL}>جنيه مكسب الشركة</p></div>
-              <div style={s.statCard}><p style={s.statN}>{totalSaved}</p><p style={s.statL}>جنيه وُفِّر للعملاء</p></div>
+              <div style={s.statCard}><p style={s.statN}>{totalRevenue}</p><p style={s.statL}>جنيه مكسب</p></div>
+              <div style={s.statCard}><p style={s.statN}>{totalSaved}</p><p style={s.statL}>جنيه وُفِّر</p></div>
             </div>
             <h2 style={s.sectionTitle}>أداء كل مكان</h2>
             {places.map(place => {
-              const stats = getPlaceStats(place.id);
+              const placeOrders = orders.filter(o => o.place_id === place.id);
+              const uniqueUsers = [...new Set(placeOrders.map(o => o.user_id))].length;
+              const revenue = placeOrders.length * (place.commission || 10);
+              const returningUsers = [...new Set(placeOrders.map(o => o.user_id))].filter(uid =>
+                placeOrders.filter(o => o.user_id === uid).length > 1
+              ).length;
               return (
                 <div key={place.id} style={s.card}>
                   <div style={s.cardRow}>
@@ -196,10 +242,10 @@ export default function AdminDashboard() {
                     <span style={s.typeBadge}>{getTypeLabel(place.type)}</span>
                   </div>
                   <div style={s.statsRow}>
-                    <div style={s.miniStat}><p style={s.miniN}>{stats.uniqueUsers}</p><p style={s.miniL}>عميل</p></div>
-                    <div style={s.miniStat}><p style={s.miniN}>{stats.totalOrders}</p><p style={s.miniL}>طلب</p></div>
-                    <div style={s.miniStat}><p style={s.miniN}>{stats.totalRevenue}</p><p style={s.miniL}>جنيه مكسب</p></div>
-                    <div style={s.miniStat}><p style={s.miniN}>{place.discount_amount}</p><p style={s.miniL}>جنيه خصم</p></div>
+                    <div style={s.miniStat}><p style={s.miniN}>{uniqueUsers}</p><p style={s.miniL}>عميل</p></div>
+                    <div style={s.miniStat}><p style={s.miniN}>{placeOrders.length}</p><p style={s.miniL}>طلب</p></div>
+                    <div style={s.miniStat}><p style={s.miniN}>{revenue}</p><p style={s.miniL}>جنيه مكسب</p></div>
+                    <div style={s.miniStat}><p style={s.miniN}>{returningUsers}</p><p style={s.miniL}>رجع تاني</p></div>
                   </div>
                 </div>
               );
@@ -211,23 +257,17 @@ export default function AdminDashboard() {
           <div>
             <div style={s.placeSelector}>
               {places.map(place => (
-                <button
-                  key={place.id}
-                  style={selectedPlaceId === place.id ? s.activeTab : s.tab}
-                  onClick={() => setSelectedPlaceId(place.id)}
-                >
+                <button key={place.id} style={selectedPlaceId === place.id ? s.activeTab : s.tab} onClick={() => setSelectedPlaceId(place.id)}>
                   {place.name}
                 </button>
               ))}
             </div>
 
-            {!selectedPlaceId && (
-              <p style={s.empty}>اختار مكان من فوق</p>
-            )}
+            {!selectedPlaceId && <p style={s.empty}>اختار مكان من فوق</p>}
 
             {selectedPlaceId && selectedPlaceAnalytics && (() => {
               const place = places.find(p => p.id === selectedPlaceId);
-              const { placeOrders, uniqueUserIds, sortedItems, dailyCounts } = selectedPlaceAnalytics;
+              const { placeOrders, uniqueUserIds, sortedItems, chartData, totalRevenue, peakHour, returningUsers } = selectedPlaceAnalytics;
 
               return (
                 <div>
@@ -239,34 +279,54 @@ export default function AdminDashboard() {
                   <div style={s.statsGrid}>
                     <div style={s.statCard}><p style={s.statN}>{uniqueUserIds.length}</p><p style={s.statL}>عميل</p></div>
                     <div style={s.statCard}><p style={s.statN}>{placeOrders.length}</p><p style={s.statL}>طلب</p></div>
-                    <div style={s.statCard}>
-                      <p style={s.statN}>{uniqueUserIds.length > 0 ? (placeOrders.length / uniqueUserIds.length).toFixed(1) : 0}</p>
-                      <p style={s.statL}>متوسط زيارات</p>
-                    </div>
-                    <div style={s.statCard}>
-                      <p style={s.statN}>{placeOrders.length * (place.commission || 10)}</p>
-                      <p style={s.statL}>جنيه مكسب</p>
-                    </div>
+                    <div style={s.statCard}><p style={s.statN}>{returningUsers}</p><p style={s.statL}>رجع تاني</p></div>
+                    <div style={s.statCard}><p style={s.statN}>{totalRevenue}</p><p style={s.statL}>جنيه مكسب</p></div>
                   </div>
 
-                  {/* جراف آخر 7 أيام */}
+                  {peakHour && (
+                    <div style={s.insightCard}>
+                      <p style={s.insightTitle}>💡 ذكاء السيستم</p>
+                      <p style={s.insightText}>وقت الذروة: الساعة {peakHour[0]}:00 ({peakHour[1]} طلب)</p>
+                      {returningUsers > 0 && <p style={s.insightText}>معدل الرجوع: {((returningUsers / uniqueUserIds.length) * 100).toFixed(0)}%</p>}
+                      {sortedItems[0] && <p style={s.insightText}>الأكتر طلباً: {sortedItems[0][0]} ({sortedItems[0][1]} مرة)</p>}
+                    </div>
+                  )}
+
                   <div style={s.chartCard}>
-                    <p style={s.subTitle}>الطلبات - آخر 7 أيام</p>
-                    <div style={s.chart}>
-                      {dailyCounts.map((d, i) => (
-                        <div key={i} style={s.chartCol}>
-                          <div style={s.barWrapper}>
-                            <div style={{ ...s.bar, height: `${(d.count / maxDailyCount) * 100}%` }}>
-                              {d.count > 0 && <span style={s.barLabel}>{d.count}</span>}
-                            </div>
-                          </div>
-                          <p style={s.chartDay}>{d.day}</p>
-                        </div>
-                      ))}
+                    <div style={s.chartHeader}>
+                      <p style={s.subTitle}>الطلبات عبر الوقت</p>
+                      <div style={s.rangeButtons}>
+                        {[{ key: "week", label: "أسبوع" }, { key: "month", label: "شهر" }, { key: "all", label: "الكل" }].map(r => (
+                          <button key={r.key} style={chartRange === r.key ? s.activeRange : s.range} onClick={() => setChartRange(r.key)}>{r.label}</button>
+                        ))}
+                      </div>
                     </div>
+                    {chartData.length === 0 ? (
+                      <p style={s.empty}>مفيش بيانات</p>
+                    ) : (
+                      <div style={s.chartWrapper}>
+                        <div style={s.chart}>
+                          {chartData.map((d, i) => (
+                            <div key={i} style={s.chartCol} title={`${d.fullDate}: ${d.count} طلب`}>
+                              <div style={s.barWrapper}>
+                                <div style={{ ...s.bar, height: `${Math.max((d.count / maxCount) * 100, d.count > 0 ? 5 : 0)}%` }}>
+                                  {d.count > 0 && chartData.length <= 30 && <span style={s.barLabel}>{d.count}</span>}
+                                </div>
+                              </div>
+                              {chartData.length <= 30 && <p style={s.chartDay}>{d.day}</p>}
+                            </div>
+                          ))}
+                        </div>
+                        {chartData.length > 30 && (
+                          <div style={s.chartFooter}>
+                            <span style={s.chartFooterText}>{chartData[0]?.fullDate}</span>
+                            <span style={s.chartFooterText}>{chartData[chartData.length - 1]?.fullDate}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
 
-                  {/* الطلبات الأكتر تكراراً */}
                   {sortedItems.length > 0 && (
                     <div style={s.card}>
                       <p style={s.subTitle}>الطلبات الأكتر تكراراً</p>
@@ -282,7 +342,6 @@ export default function AdminDashboard() {
                     </div>
                   )}
 
-                  {/* العملاء */}
                   <div style={s.card}>
                     <p style={s.subTitle}>العملاء ({uniqueUserIds.length})</p>
                     {uniqueUserIds.map(userId => {
@@ -293,17 +352,22 @@ export default function AdminDashboard() {
                       const mostFrequent = userItems.sort((a, b) =>
                         userItems.filter(v => v === b).length - userItems.filter(v => v === a).length
                       )[0];
+                      const daysSinceLastVisit = lastVisit ? Math.floor((new Date() - new Date(lastVisit)) / (1000 * 60 * 60 * 24)) : null;
 
                       return user ? (
                         <div key={userId} style={s.userRow}>
                           <div>
                             <p style={s.userName}>{user.name}</p>
                             <p style={s.userPhone}>{user.phone}</p>
-                            {mostFrequent && <p style={s.userFav}>الأكتر طلباً: {mostFrequent}</p>}
+                            {mostFrequent && <p style={s.userFav}>⭐ {mostFrequent}</p>}
                           </div>
                           <div style={{ textAlign: "left" }}>
                             <p style={s.userVisits}>{userOrders.length} زيارة</p>
-                            <p style={s.userDate}>{lastVisit ? new Date(lastVisit).toLocaleDateString("ar-EG") : ""}</p>
+                            {daysSinceLastVisit !== null && (
+                              <p style={{ ...s.userDate, color: daysSinceLastVisit > 7 ? "#ff4444" : "#999" }}>
+                                {daysSinceLastVisit === 0 ? "النهارده" : `${daysSinceLastVisit} يوم`}
+                              </p>
+                            )}
                           </div>
                         </div>
                       ) : null;
@@ -312,6 +376,29 @@ export default function AdminDashboard() {
                 </div>
               );
             })()}
+          </div>
+        )}
+
+        {activeTab === "notifications" && (
+          <div>
+            <div style={s.ruleActions}>
+              <button style={s.btn} onClick={runSmartRules}>تشغيل Smart Rules دلوقتي</button>
+            </div>
+            {notifications.length === 0 ? (
+              <p style={s.empty}>مفيش إشعارات دلوقتي</p>
+            ) : (
+              notifications.map(n => (
+                <div key={n.id} style={s.card}>
+                  <div style={s.cardRow}>
+                    <span style={s.cardMain}>{n.users?.name}</span>
+                    <span style={s.cardSub}>{n.users?.phone}</span>
+                  </div>
+                  <p style={s.notifMessage}>{n.message}</p>
+                  <p style={s.cardDate}>{new Date(n.created_at).toLocaleDateString("ar-EG")}</p>
+                  <button style={s.sentBtn} onClick={() => markNotificationSent(n.id)}>✓ تم الإرسال على واتساب</button>
+                </div>
+              ))
+            )}
           </div>
         )}
 
@@ -393,9 +480,7 @@ export default function AdminDashboard() {
                   <span style={s.cardSub}>كود: {p.cashier_code}</span>
                   <span style={s.cardSub}>خصم: {p.discount_amount} جنيه</span>
                 </div>
-                <div style={s.cardRow}>
-                  <span style={s.cardSub}>كوميشن: {p.commission} جنيه</span>
-                </div>
+                <span style={s.cardSub}>كوميشن: {p.commission} جنيه</span>
                 <button style={s.deleteBtn} onClick={() => handleDeletePlace(p.id)}>حذف</button>
               </div>
             ))}
@@ -492,18 +577,28 @@ const s = {
   label: { fontSize: "13px", fontWeight: "600", color: "#000", marginBottom: "6px", display: "block" },
   input: { width: "100%", padding: "12px 16px", border: "1.5px solid #000", borderRadius: "10px", fontSize: "14px", marginBottom: "12px", outline: "none", textAlign: "right", boxSizing: "border-box", backgroundColor: "#fff" },
   btn: { width: "100%", padding: "14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "10px", fontSize: "15px", fontWeight: "700", cursor: "pointer" },
-  deleteBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px" },
+  deleteBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px", marginTop: "8px" },
   toggleBtn: { padding: "6px 14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px" },
   empty: { textAlign: "center", padding: "40px", color: "#666" },
   placeSelector: { display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" },
   analyticsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" },
+  insightCard: { backgroundColor: "#000", color: "#fff", borderRadius: "12px", padding: "16px", marginBottom: "12px" },
+  insightTitle: { fontSize: "14px", fontWeight: "700", marginBottom: "8px" },
+  insightText: { fontSize: "13px", opacity: 0.8, marginBottom: "4px" },
   chartCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", marginBottom: "12px" },
-  chart: { display: "flex", alignItems: "flex-end", gap: "8px", height: "120px", marginTop: "12px" },
-  chartCol: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" },
+  chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" },
+  rangeButtons: { display: "flex", gap: "6px" },
+  range: { padding: "4px 12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
+  activeRange: { padding: "4px 12px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "6px", cursor: "pointer", fontSize: "12px" },
+  chartWrapper: { width: "100%", overflowX: "auto" },
+  chart: { display: "flex", alignItems: "flex-end", gap: "4px", height: "120px", minWidth: "100%" },
+  chartCol: { flex: "0 0 auto", minWidth: "20px", display: "flex", flexDirection: "column", alignItems: "center", height: "100%", cursor: "pointer" },
   barWrapper: { flex: 1, display: "flex", alignItems: "flex-end", width: "100%" },
-  bar: { width: "100%", backgroundColor: "#000", borderRadius: "4px 4px 0 0", minHeight: "4px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
-  barLabel: { fontSize: "10px", color: "#fff", marginTop: "2px" },
-  chartDay: { fontSize: "10px", color: "#666", marginTop: "4px" },
+  bar: { width: "100%", backgroundColor: "#000", borderRadius: "4px 4px 0 0", minHeight: "2px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
+  barLabel: { fontSize: "9px", color: "#fff", marginTop: "2px" },
+  chartDay: { fontSize: "9px", color: "#666", marginTop: "2px" },
+  chartFooter: { display: "flex", justifyContent: "space-between", marginTop: "4px" },
+  chartFooterText: { fontSize: "11px", color: "#999" },
   subTitle: { fontSize: "13px", fontWeight: "700", color: "#000", marginBottom: "12px" },
   itemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f5f5" },
   itemName: { fontSize: "13px", color: "#000", flex: 1 },
@@ -516,4 +611,7 @@ const s = {
   userFav: { fontSize: "11px", color: "#999", marginTop: "2px" },
   userVisits: { fontSize: "13px", fontWeight: "700", color: "#000" },
   userDate: { fontSize: "11px", color: "#999" },
+  notifMessage: { fontSize: "14px", color: "#000", margin: "8px 0", fontWeight: "600" },
+  sentBtn: { marginTop: "8px", padding: "8px 16px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "13px" },
+  ruleActions: { marginBottom: "16px" },
 };
