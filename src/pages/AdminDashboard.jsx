@@ -10,6 +10,7 @@ export default function AdminDashboard() {
   const [orders, setOrders] = useState([]);
   const [rules, setRules] = useState([]);
   const [activeTab, setActiveTab] = useState("overview");
+  const [selectedPlaceId, setSelectedPlaceId] = useState(null);
   const [newPlace, setNewPlace] = useState({ name: "", type: "restaurant", cashier_code: "", discount_amount: "", commission: "10" });
   const [newRule, setNewRule] = useState({ rule_type: "inactive", days_inactive: "", min_visits: "", message: "" });
   const [selectedUser, setSelectedUser] = useState("");
@@ -107,7 +108,6 @@ export default function AdminDashboard() {
     return type;
   }
 
-  // حساب مكسب الشركة لكل مكان
   function getPlaceStats(placeId) {
     const placeOrders = orders.filter(o => o.place_id === placeId);
     const place = places.find(p => p.id === placeId);
@@ -117,11 +117,39 @@ export default function AdminDashboard() {
     return { totalOrders: placeOrders.length, totalRevenue, uniqueUsers };
   }
 
-  const totalRevenue = orders.length * 10;
+  function getPlaceAnalytics(placeId) {
+    const placeOrders = orders.filter(o => o.place_id === placeId);
+    const uniqueUserIds = [...new Set(placeOrders.map(o => o.user_id))];
+    const itemCounts = placeOrders.reduce((acc, o) => {
+      acc[o.item] = (acc[o.item] || 0) + 1;
+      return acc;
+    }, {});
+    const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+
+    // بيانات الجراف - آخر 7 أيام
+    const last7Days = Array.from({ length: 7 }, (_, i) => {
+      const d = new Date();
+      d.setDate(d.getDate() - (6 - i));
+      return d.toISOString().split("T")[0];
+    });
+
+    const dailyCounts = last7Days.map(day => ({
+      day: day.slice(5),
+      count: placeOrders.filter(o => o.created_at?.startsWith(day)).length,
+    }));
+
+    return { placeOrders, uniqueUserIds, sortedItems, dailyCounts };
+  }
+
+  const totalRevenue = orders.reduce((sum, o) => {
+    const place = places.find(p => p.id === o.place_id);
+    return sum + (place?.commission || 10);
+  }, 0);
   const totalSaved = orders.reduce((sum, o) => sum + (o.discount || 0), 0);
 
   const tabs = [
     { key: "overview", label: "نظرة عامة" },
+    { key: "analytics", label: "تحليلات" },
     { key: "otps", label: `OTPs (${otps.length})` },
     { key: "users", label: `المستخدمين (${users.length})` },
     { key: "orders", label: `الطلبات (${orders.length})` },
@@ -129,6 +157,9 @@ export default function AdminDashboard() {
     { key: "rules", label: `Smart Rules (${rules.length})` },
     { key: "discount", label: "إرسال خصم" },
   ];
+
+  const selectedPlaceAnalytics = selectedPlaceId ? getPlaceAnalytics(selectedPlaceId) : null;
+  const maxDailyCount = selectedPlaceAnalytics ? Math.max(...selectedPlaceAnalytics.dailyCounts.map(d => d.count), 1) : 1;
 
   return (
     <div style={s.page}>
@@ -155,7 +186,6 @@ export default function AdminDashboard() {
               <div style={s.statCard}><p style={s.statN}>{totalRevenue}</p><p style={s.statL}>جنيه مكسب الشركة</p></div>
               <div style={s.statCard}><p style={s.statN}>{totalSaved}</p><p style={s.statL}>جنيه وُفِّر للعملاء</p></div>
             </div>
-
             <h2 style={s.sectionTitle}>أداء كل مكان</h2>
             {places.map(place => {
               const stats = getPlaceStats(place.id);
@@ -174,6 +204,114 @@ export default function AdminDashboard() {
                 </div>
               );
             })}
+          </div>
+        )}
+
+        {activeTab === "analytics" && (
+          <div>
+            <div style={s.placeSelector}>
+              {places.map(place => (
+                <button
+                  key={place.id}
+                  style={selectedPlaceId === place.id ? s.activeTab : s.tab}
+                  onClick={() => setSelectedPlaceId(place.id)}
+                >
+                  {place.name}
+                </button>
+              ))}
+            </div>
+
+            {!selectedPlaceId && (
+              <p style={s.empty}>اختار مكان من فوق</p>
+            )}
+
+            {selectedPlaceId && selectedPlaceAnalytics && (() => {
+              const place = places.find(p => p.id === selectedPlaceId);
+              const { placeOrders, uniqueUserIds, sortedItems, dailyCounts } = selectedPlaceAnalytics;
+
+              return (
+                <div>
+                  <div style={s.analyticsHeader}>
+                    <h2 style={s.sectionTitle}>{place.name}</h2>
+                    <span style={s.typeBadge}>{getTypeLabel(place.type)}</span>
+                  </div>
+
+                  <div style={s.statsGrid}>
+                    <div style={s.statCard}><p style={s.statN}>{uniqueUserIds.length}</p><p style={s.statL}>عميل</p></div>
+                    <div style={s.statCard}><p style={s.statN}>{placeOrders.length}</p><p style={s.statL}>طلب</p></div>
+                    <div style={s.statCard}>
+                      <p style={s.statN}>{uniqueUserIds.length > 0 ? (placeOrders.length / uniqueUserIds.length).toFixed(1) : 0}</p>
+                      <p style={s.statL}>متوسط زيارات</p>
+                    </div>
+                    <div style={s.statCard}>
+                      <p style={s.statN}>{placeOrders.length * (place.commission || 10)}</p>
+                      <p style={s.statL}>جنيه مكسب</p>
+                    </div>
+                  </div>
+
+                  {/* جراف آخر 7 أيام */}
+                  <div style={s.chartCard}>
+                    <p style={s.subTitle}>الطلبات - آخر 7 أيام</p>
+                    <div style={s.chart}>
+                      {dailyCounts.map((d, i) => (
+                        <div key={i} style={s.chartCol}>
+                          <div style={s.barWrapper}>
+                            <div style={{ ...s.bar, height: `${(d.count / maxDailyCount) * 100}%` }}>
+                              {d.count > 0 && <span style={s.barLabel}>{d.count}</span>}
+                            </div>
+                          </div>
+                          <p style={s.chartDay}>{d.day}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* الطلبات الأكتر تكراراً */}
+                  {sortedItems.length > 0 && (
+                    <div style={s.card}>
+                      <p style={s.subTitle}>الطلبات الأكتر تكراراً</p>
+                      {sortedItems.slice(0, 5).map(([item, count]) => (
+                        <div key={item} style={s.itemRow}>
+                          <span style={s.itemName}>{item}</span>
+                          <div style={s.itemRight}>
+                            <div style={{ ...s.itemBar, width: `${(count / sortedItems[0][1]) * 100}%` }} />
+                            <span style={s.itemCount}>{count} مرة</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* العملاء */}
+                  <div style={s.card}>
+                    <p style={s.subTitle}>العملاء ({uniqueUserIds.length})</p>
+                    {uniqueUserIds.map(userId => {
+                      const user = users.find(u => u.id === userId);
+                      const userOrders = placeOrders.filter(o => o.user_id === userId);
+                      const lastVisit = userOrders[0]?.created_at;
+                      const userItems = userOrders.map(o => o.item).filter(Boolean);
+                      const mostFrequent = userItems.sort((a, b) =>
+                        userItems.filter(v => v === b).length - userItems.filter(v => v === a).length
+                      )[0];
+
+                      return user ? (
+                        <div key={userId} style={s.userRow}>
+                          <div>
+                            <p style={s.userName}>{user.name}</p>
+                            <p style={s.userPhone}>{user.phone}</p>
+                            {mostFrequent && <p style={s.userFav}>الأكتر طلباً: {mostFrequent}</p>}
+                          </div>
+                          <div style={{ textAlign: "left" }}>
+                            <p style={s.userVisits}>{userOrders.length} زيارة</p>
+                            <p style={s.userDate}>{lastVisit ? new Date(lastVisit).toLocaleDateString("ar-EG") : ""}</p>
+                          </div>
+                        </div>
+                      ) : null;
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -357,4 +495,25 @@ const s = {
   deleteBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #000", borderRadius: "8px", cursor: "pointer", fontSize: "12px" },
   toggleBtn: { padding: "6px 14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "12px" },
   empty: { textAlign: "center", padding: "40px", color: "#666" },
+  placeSelector: { display: "flex", gap: "8px", marginBottom: "20px", flexWrap: "wrap" },
+  analyticsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px" },
+  chartCard: { backgroundColor: "#fff", border: "1px solid #e0e0e0", borderRadius: "12px", padding: "20px", marginBottom: "12px" },
+  chart: { display: "flex", alignItems: "flex-end", gap: "8px", height: "120px", marginTop: "12px" },
+  chartCol: { flex: 1, display: "flex", flexDirection: "column", alignItems: "center", height: "100%" },
+  barWrapper: { flex: 1, display: "flex", alignItems: "flex-end", width: "100%" },
+  bar: { width: "100%", backgroundColor: "#000", borderRadius: "4px 4px 0 0", minHeight: "4px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
+  barLabel: { fontSize: "10px", color: "#fff", marginTop: "2px" },
+  chartDay: { fontSize: "10px", color: "#666", marginTop: "4px" },
+  subTitle: { fontSize: "13px", fontWeight: "700", color: "#000", marginBottom: "12px" },
+  itemRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "8px 0", borderBottom: "1px solid #f5f5f5" },
+  itemName: { fontSize: "13px", color: "#000", flex: 1 },
+  itemRight: { display: "flex", alignItems: "center", gap: "8px" },
+  itemBar: { height: "6px", backgroundColor: "#000", borderRadius: "3px", maxWidth: "80px" },
+  itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "50px", textAlign: "left" },
+  userRow: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "12px 0", borderBottom: "1px solid #f5f5f5" },
+  userName: { fontSize: "14px", fontWeight: "700", color: "#000" },
+  userPhone: { fontSize: "12px", color: "#666" },
+  userFav: { fontSize: "11px", color: "#999", marginTop: "2px" },
+  userVisits: { fontSize: "13px", fontWeight: "700", color: "#000" },
+  userDate: { fontSize: "11px", color: "#999" },
 };
