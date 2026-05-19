@@ -2,12 +2,21 @@ export default function YawmiLogo({ className = "", as: Tag = "h1" }) {
   const letters = ["Y", "a", "w", "m", "i"];
 
   return (
-    <Tag className={className} style={{ display: "inline-flex", direction: "ltr" }}>
+    <Tag 
+      className={className} 
+      style={{ 
+        display: "inline-flex", 
+        direction: "ltr",
+        fontSize: "clamp(2rem, 10vw, 4rem)", // Much larger on mobile, scales nicely
+        margin: 0,
+        lineHeight: 1.2
+      }}
+    >
       <style>{`
         .yawmi-logo {
           display: inline-flex;
           align-items: baseline;
-          gap: 2px; /* better spacing between letters */
+          gap: 0.08em; /* proportional gap */
           direction: ltr;
         }
         .yawmi-logo-letter {
@@ -15,6 +24,8 @@ export default function YawmiLogo({ className = "", as: Tag = "h1" }) {
           will-change: transform, opacity;
           transform-origin: center;
           opacity: 0;
+          font-weight: 800; /* bolder for better visibility */
+          letter-spacing: -0.02em;
         }
         
         /* Y stays in place, others originate from Y's position */
@@ -44,6 +55,13 @@ export default function YawmiLogo({ className = "", as: Tag = "h1" }) {
         }
         .yawmi-logo-letter[data-i="4"] {
           animation: yawmiLetterEmerge 540ms cubic-bezier(0.2, 0.9, 0.4, 1.1) 380ms forwards;
+        }
+
+        /* Extra large on small screens */
+        @media (max-width: 480px) {
+          .yawmi-logo-letter {
+            font-size: 2.8rem; /* explicit large size for very small phones */
+          }
         }
 
         /* Reduced motion */
