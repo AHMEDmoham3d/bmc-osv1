@@ -2,36 +2,6 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
-// أيقونة دائرية محسنة للقائمة الجانبية
-const OutlineIcon = ({ active = false }) => (
-  <span
-    style={{
-      display: "inline-flex",
-      alignItems: "center",
-      justifyContent: "center",
-      width: "22px",
-      height: "22px",
-      borderRadius: "50%",
-      border: "2px solid currentColor",
-      backgroundColor: active ? "currentColor" : "transparent",
-      marginLeft: "12px",
-      transition: "all 0.2s ease",
-      flexShrink: 0,
-    }}
-  >
-    {active && (
-      <span
-        style={{
-          width: "8px",
-          height: "8px",
-          borderRadius: "50%",
-          backgroundColor: "#fff",
-        }}
-      />
-    )}
-  </span>
-);
-
 export default function AdminDashboard() {
   const [otps, setOtps] = useState([]);
   const [users, setUsers] = useState([]);
@@ -42,19 +12,8 @@ export default function AdminDashboard() {
   const [activeTab, setActiveTab] = useState("overview");
   const [selectedPlaceId, setSelectedPlaceId] = useState(null);
   const [chartRange, setChartRange] = useState("week");
-  const [newPlace, setNewPlace] = useState({
-    name: "",
-    type: "restaurant",
-    cashier_code: "",
-    discount_amount: "",
-    commission: "10",
-  });
-  const [newRule, setNewRule] = useState({
-    rule_type: "inactive",
-    days_inactive: "",
-    min_visits: "",
-    message: "",
-  });
+  const [newPlace, setNewPlace] = useState({ name: "", type: "restaurant", cashier_code: "", discount_amount: "", commission: "10" });
+  const [newRule, setNewRule] = useState({ rule_type: "inactive", days_inactive: "", min_visits: "", message: "" });
   const [selectedUser, setSelectedUser] = useState("");
   const [selectedPlace, setSelectedPlace] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -68,10 +27,7 @@ export default function AdminDashboard() {
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  useEffect(() => {
-    checkAdmin();
-    loadData();
-  }, []);
+  useEffect(() => { checkAdmin(); loadData(); }, []);
 
   async function checkAdmin() {
     const { data } = await supabase.auth.getSession();
@@ -96,9 +52,34 @@ export default function AdminDashboard() {
   }
 
   async function runSmartRules() {
-    await supabase.rpc("check_smart_rules");
+    const newNotifications = [];
+    for (const rule of rules.filter(r => r.active)) {
+      for (const user of users) {
+        const userOrders = orders.filter(o => o.user_id === user.id);
+        if (rule.rule_type === "inactive" && rule.days_inactive) {
+          const lastOrder = userOrders[0];
+          if (!lastOrder) continue;
+          const daysSince = Math.floor((new Date() - new Date(lastOrder.created_at)) / (1000 * 60 * 60 * 24));
+          if (daysSince >= rule.days_inactive) {
+            const exists = notifications.find(n => n.user_id === user.id && n.rule_id === rule.id);
+            if (!exists) newNotifications.push({ user_id: user.id, rule_id: rule.id, message: rule.message });
+          }
+        }
+        if (rule.rule_type === "frequent" && rule.min_visits) {
+          if (userOrders.length >= rule.min_visits) {
+            const exists = notifications.find(n => n.user_id === user.id && n.rule_id === rule.id);
+            if (!exists) newNotifications.push({ user_id: user.id, rule_id: rule.id, message: rule.message });
+          }
+        }
+      }
+    }
+    if (newNotifications.length > 0) {
+      await supabase.from("notifications").upsert(newNotifications, { onConflict: "user_id,rule_id" });
+      alert(`تم إنشاء ${newNotifications.length} إشعار جديد`);
+    } else {
+      alert("مفيش إشعارات جديدة دلوقتي");
+    }
     loadData();
-    alert("تم تشغيل Smart Rules");
   }
 
   async function markNotificationSent(id) {
@@ -112,26 +93,14 @@ export default function AdminDashboard() {
   }
 
   async function handleAddPlace() {
-    if (!newPlace.name || !newPlace.cashier_code || !newPlace.discount_amount) {
-      alert("ادخل كل البيانات");
-      return;
-    }
+    if (!newPlace.name || !newPlace.cashier_code || !newPlace.discount_amount) { alert("ادخل كل البيانات"); return; }
     const { error } = await supabase.from("places").insert({
       ...newPlace,
       discount_amount: Number(newPlace.discount_amount),
       commission: Number(newPlace.commission),
     });
-    if (error) {
-      alert("حصل خطأ: " + error.message);
-      return;
-    }
-    setNewPlace({
-      name: "",
-      type: "restaurant",
-      cashier_code: "",
-      discount_amount: "",
-      commission: "10",
-    });
+    if (error) { alert("حصل خطأ: " + error.message); return; }
+    setNewPlace({ name: "", type: "restaurant", cashier_code: "", discount_amount: "", commission: "10" });
     loadData();
   }
 
@@ -142,21 +111,13 @@ export default function AdminDashboard() {
   }
 
   async function handleAddRule() {
-    if (!newRule.message) {
-      alert("ادخل الرسالة");
-      return;
-    }
+    if (!newRule.message) { alert("ادخل الرسالة"); return; }
     await supabase.from("smart_rules").insert({
       ...newRule,
       days_inactive: Number(newRule.days_inactive) || null,
       min_visits: Number(newRule.min_visits) || null,
     });
-    setNewRule({
-      rule_type: "inactive",
-      days_inactive: "",
-      min_visits: "",
-      message: "",
-    });
+    setNewRule({ rule_type: "inactive", days_inactive: "", min_visits: "", message: "" });
     loadData();
   }
 
@@ -172,11 +133,8 @@ export default function AdminDashboard() {
   }
 
   async function sendDiscount() {
-    if (!selectedUser || !selectedPlace) {
-      alert("اختار مستخدم ومكان");
-      return;
-    }
-    const place = places.find((p) => p.id === selectedPlace);
+    if (!selectedUser || !selectedPlace) { alert("اختار مستخدم ومكان"); return; }
+    const place = places.find(p => p.id === selectedPlace);
     const code = Math.floor(1000 + Math.random() * 9000).toString();
     await supabase.from("discount_codes").insert({
       user_id: selectedUser,
@@ -185,8 +143,7 @@ export default function AdminDashboard() {
       place_id: selectedPlace,
     });
     alert("كود الخصم: " + code);
-    setSelectedUser("");
-    setSelectedPlace("");
+    setSelectedUser(""); setSelectedPlace("");
   }
 
   function getTypeLabel(type) {
@@ -198,9 +155,9 @@ export default function AdminDashboard() {
   }
 
   function getChartData(placeOrders) {
+    if (placeOrders.length === 0) return [];
     const now = new Date();
     let days = [];
-
     if (chartRange === "week") {
       days = Array.from({ length: 7 }, (_, i) => {
         const d = new Date(now);
@@ -213,102 +170,103 @@ export default function AdminDashboard() {
         d.setDate(d.getDate() - (29 - i));
         return d.toISOString().split("T")[0];
       });
-    } else if (chartRange === "all") {
-      if (placeOrders.length === 0) return [];
+    } else {
       const firstDate = new Date(placeOrders[placeOrders.length - 1].created_at);
-      const diffDays = Math.ceil((now - firstDate) / (1000 * 60 * 60 * 24));
-      days = Array.from({ length: diffDays + 1 }, (_, i) => {
+      firstDate.setHours(0, 0, 0, 0);
+      const diffDays = Math.ceil((now - firstDate) / (1000 * 60 * 60 * 24)) + 1;
+      days = Array.from({ length: diffDays }, (_, i) => {
         const d = new Date(firstDate);
         d.setDate(d.getDate() + i);
         return d.toISOString().split("T")[0];
       });
     }
-
-    return days.map((day) => ({
-      day: chartRange === "all" && days.length > 30 ? day.slice(5) : day.slice(5),
+    return days.map(day => ({
+      day: day.slice(5),
       fullDate: day,
-      count: placeOrders.filter((o) => o.created_at?.startsWith(day)).length,
+      count: placeOrders.filter(o => o.created_at?.slice(0, 10) === day).length,
     }));
   }
 
-  function getPlaceAnalytics(placeId) {
-    const placeOrders = orders.filter((o) => o.place_id === placeId);
-    const uniqueUserIds = [...new Set(placeOrders.map((o) => o.user_id))];
-    const itemCounts = placeOrders.reduce((acc, o) => {
-      if (o.item) acc[o.item] = (acc[o.item] || 0) + 1;
-      return acc;
-    }, {});
-    const sortedItems = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
-    const chartData = getChartData(placeOrders);
-    const totalRevenue =
-      placeOrders.length * (places.find((p) => p.id === placeId)?.commission || 10);
-
-    const hourCounts = placeOrders.reduce((acc, o) => {
+  function getPeakHour(placeOrders) {
+    if (placeOrders.length === 0) return null;
+    const hourCounts = {};
+    placeOrders.forEach(o => {
       const hour = new Date(o.created_at).getHours();
-      acc[hour] = (acc[hour] || 0) + 1;
-      return acc;
-    }, {});
-    const peakHour = Object.entries(hourCounts).sort((a, b) => b[1] - a[1])[0];
+      hourCounts[hour] = (hourCounts[hour] || 0) + 1;
+    });
+    const sorted = Object.entries(hourCounts).sort((a, b) => b[1] - a[1]);
+    return sorted[0] ? { hour: sorted[0][0], count: sorted[0][1] } : null;
+  }
 
-    const returningUsers = uniqueUserIds.filter(
-      (uid) => placeOrders.filter((o) => o.user_id === uid).length > 1
-    ).length;
+  function getMostOrderedItem(placeOrders) {
+    if (placeOrders.length === 0) return null;
+    const itemCounts = {};
+    placeOrders.forEach(o => {
+      if (o.item) itemCounts[o.item] = (itemCounts[o.item] || 0) + 1;
+    });
+    const sorted = Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+    return sorted[0] ? { item: sorted[0][0], count: sorted[0][1] } : null;
+  }
 
-    return {
-      placeOrders,
-      uniqueUserIds,
-      sortedItems,
-      chartData,
-      totalRevenue,
-      peakHour,
-      returningUsers,
-    };
+  function getSortedItems(placeOrders) {
+    const itemCounts = {};
+    placeOrders.forEach(o => {
+      if (o.item) itemCounts[o.item] = (itemCounts[o.item] || 0) + 1;
+    });
+    return Object.entries(itemCounts).sort((a, b) => b[1] - a[1]);
+  }
+
+  function getReturningUsers(placeOrders, uniqueUserIds) {
+    return uniqueUserIds.filter(uid => placeOrders.filter(o => o.user_id === uid).length > 1).length;
   }
 
   const totalRevenue = orders.reduce((sum, o) => {
-    const place = places.find((p) => p.id === o.place_id);
+    const place = places.find(p => p.id === o.place_id);
     return sum + (place?.commission || 10);
   }, 0);
   const totalSaved = orders.reduce((sum, o) => sum + (o.discount || 0), 0);
 
   const tabs = [
-    { key: "overview", label: "نظرة عامة" },
-    { key: "analytics", label: "تحليلات" },
-    { key: "notifications", label: `إشعارات (${notifications.length})` },
-    { key: "otps", label: `OTPs (${otps.length})` },
-    { key: "users", label: `المستخدمين (${users.length})` },
-    { key: "orders", label: `الطلبات (${orders.length})` },
-    { key: "places", label: `الأماكن (${places.length})` },
-    { key: "rules", label: `Smart Rules (${rules.length})` },
-    { key: "discount", label: "إرسال خصم" },
+    { key: "overview", label: "نظرة عامة", icon: "📊" },
+    { key: "analytics", label: "تحليلات", icon: "📈" },
+    { key: "notifications", label: `إشعارات (${notifications.length})`, icon: "🔔" },
+    { key: "otps", label: `OTPs (${otps.length})`, icon: "🔑" },
+    { key: "users", label: `المستخدمين (${users.length})`, icon: "👥" },
+    { key: "orders", label: `الطلبات (${orders.length})`, icon: "🛒" },
+    { key: "places", label: `الأماكن (${places.length})`, icon: "📍" },
+    { key: "rules", label: `Smart Rules (${rules.length})`, icon: "⚙️" },
+    { key: "discount", label: "إرسال خصم", icon: "🎁" },
   ];
 
-  const selectedPlaceAnalytics = selectedPlaceId
-    ? getPlaceAnalytics(selectedPlaceId)
-    : null;
-  const maxCount = selectedPlaceAnalytics
-    ? Math.max(...selectedPlaceAnalytics.chartData.map((d) => d.count), 1)
-    : 1;
+  const selectedPlaceData = selectedPlaceId ? (() => {
+    const placeOrders = orders.filter(o => o.place_id === selectedPlaceId);
+    const uniqueUserIds = [...new Set(placeOrders.map(o => o.user_id))];
+    const chartData = getChartData(placeOrders);
+    const maxCount = Math.max(...chartData.map(d => d.count), 1);
+    const peakHour = getPeakHour(placeOrders);
+    const mostOrdered = getMostOrderedItem(placeOrders);
+    const sortedItems = getSortedItems(placeOrders);
+    const returningUsers = getReturningUsers(placeOrders, uniqueUserIds);
+    const place = places.find(p => p.id === selectedPlaceId);
+    const totalRev = placeOrders.length * (place?.commission || 10);
+    return { placeOrders, uniqueUserIds, chartData, maxCount, peakHour, mostOrdered, sortedItems, returningUsers, totalRev };
+  })() : null;
 
   return (
-    <div style={s.page}>
-      {/* القائمة الجانبية المحسنة */}
+    <div style={s.app}>
+      {/* القائمة الجانبية */}
       {(isMobile ? sidebarOpen : true) && (
         <div style={isMobile ? s.sidebarMobileOverlay : s.sidebarDesktop}>
-          {isMobile && (
-            <div style={s.sidebarBackdrop} onClick={() => setSidebarOpen(false)} />
-          )}
-          <div style={s.sidebarContent}>
+          {isMobile && <div style={s.backdrop} onClick={() => setSidebarOpen(false)} />}
+          <div style={s.sidebar}>
             <div style={s.sidebarHeader}>
-              <h2 style={s.sidebarLogo}>Nudge</h2>
+              <h2 style={s.logo}>Nudge</h2>
               {isMobile && (
-                <button style={s.closeSidebarBtn} onClick={() => setSidebarOpen(false)}>
-                  ✕
-                </button>
+                <button style={s.closeBtn} onClick={() => setSidebarOpen(false)}>✕</button>
               )}
             </div>
             <div style={s.sidebarNav}>
-              {tabs.map((tab) => (
+              {tabs.map(tab => (
                 <button
                   key={tab.key}
                   style={activeTab === tab.key ? s.sidebarItemActive : s.sidebarItem}
@@ -317,15 +275,13 @@ export default function AdminDashboard() {
                     if (isMobile) setSidebarOpen(false);
                   }}
                 >
-                  <OutlineIcon active={activeTab === tab.key} />
-                  <span style={s.sidebarItemText}>{tab.label}</span>
+                  <span style={s.sidebarIcon}>{tab.icon}</span>
+                  <span style={s.sidebarLabel}>{tab.label}</span>
                 </button>
               ))}
             </div>
             <div style={s.sidebarFooter}>
-              <button style={s.sidebarLogout} onClick={handleLogout}>
-                خروج
-              </button>
+              <button style={s.logoutBtn} onClick={handleLogout}>🚪 خروج</button>
             </div>
           </div>
         </div>
@@ -335,45 +291,29 @@ export default function AdminDashboard() {
       <div style={isMobile ? s.mainMobile : s.mainDesktop}>
         <div style={s.topBar}>
           {isMobile && (
-            <button style={s.hamburgerBtn} onClick={() => setSidebarOpen(true)}>
-              ☰
-            </button>
+            <button style={s.hamburger} onClick={() => setSidebarOpen(true)}>☰</button>
           )}
-          <h1 style={s.topBarTitle}>لوحة التحكم</h1>
-          <button style={s.topBarRefresh} onClick={loadData}>
-            ⟳ تحديث
-          </button>
+          <h1 style={s.pageTitle}>لوحة التحكم</h1>
+          <button style={s.refreshBtn} onClick={loadData}>⟳ تحديث</button>
         </div>
 
         <div style={s.content}>
           {activeTab === "overview" && (
             <div>
               <div style={s.statsGrid}>
-                <div style={s.statCard}>
-                  <p style={s.statN}>{users.length}</p>
-                  <p style={s.statL}>مستخدم</p>
-                </div>
-                <div style={s.statCard}>
-                  <p style={s.statN}>{orders.length}</p>
-                  <p style={s.statL}>طلب</p>
-                </div>
-                <div style={s.statCard}>
-                  <p style={s.statN}>{totalRevenue}</p>
-                  <p style={s.statL}>جنيه مكسب</p>
-                </div>
-                <div style={s.statCard}>
-                  <p style={s.statN}>{totalSaved}</p>
-                  <p style={s.statL}>جنيه وُفِّر</p>
-                </div>
+                <div style={s.statCard}><p style={s.statN}>{users.length}</p><p style={s.statL}>مستخدم</p></div>
+                <div style={s.statCard}><p style={s.statN}>{orders.length}</p><p style={s.statL}>طلب</p></div>
+                <div style={s.statCard}><p style={s.statN}>{totalRevenue}</p><p style={s.statL}>جنيه مكسب</p></div>
+                <div style={s.statCard}><p style={s.statN}>{totalSaved}</p><p style={s.statL}>جنيه وُفِّر</p></div>
               </div>
               <h2 style={s.sectionTitle}>أداء كل مكان</h2>
-              {places.map((place) => {
-                const placeOrders = orders.filter((o) => o.place_id === place.id);
-                const uniqueUsers = [...new Set(placeOrders.map((o) => o.user_id))].length;
+              {places.length === 0 && <p style={s.empty}>مفيش أماكن لسه</p>}
+              {places.map(place => {
+                const placeOrders = orders.filter(o => o.place_id === place.id);
+                const uniqueUsers = [...new Set(placeOrders.map(o => o.user_id))];
                 const revenue = placeOrders.length * (place.commission || 10);
-                const returningUsers = [
-                  ...new Set(placeOrders.map((o) => o.user_id)),
-                ].filter((uid) => placeOrders.filter((o) => o.user_id === uid).length > 1).length;
+                const returning = getReturningUsers(placeOrders, uniqueUsers);
+                const retentionRate = uniqueUsers.length > 0 ? ((returning / uniqueUsers.length) * 100).toFixed(0) : 0;
                 return (
                   <div key={place.id} style={s.card}>
                     <div style={s.cardRow}>
@@ -381,22 +321,10 @@ export default function AdminDashboard() {
                       <span style={s.typeBadge}>{getTypeLabel(place.type)}</span>
                     </div>
                     <div style={s.statsRow}>
-                      <div style={s.miniStat}>
-                        <p style={s.miniN}>{uniqueUsers}</p>
-                        <p style={s.miniL}>عميل</p>
-                      </div>
-                      <div style={s.miniStat}>
-                        <p style={s.miniN}>{placeOrders.length}</p>
-                        <p style={s.miniL}>طلب</p>
-                      </div>
-                      <div style={s.miniStat}>
-                        <p style={s.miniN}>{revenue}</p>
-                        <p style={s.miniL}>جنيه مكسب</p>
-                      </div>
-                      <div style={s.miniStat}>
-                        <p style={s.miniN}>{returningUsers}</p>
-                        <p style={s.miniL}>رجع تاني</p>
-                      </div>
+                      <div style={s.miniStat}><p style={s.miniN}>{uniqueUsers.length}</p><p style={s.miniL}>عميل</p></div>
+                      <div style={s.miniStat}><p style={s.miniN}>{placeOrders.length}</p><p style={s.miniL}>طلب</p></div>
+                      <div style={s.miniStat}><p style={s.miniN}>{revenue}</p><p style={s.miniL}>جنيه مكسب</p></div>
+                      <div style={s.miniStat}><p style={s.miniN}>{retentionRate}%</p><p style={s.miniL}>Retention</p></div>
                     </div>
                   </div>
                 );
@@ -407,187 +335,149 @@ export default function AdminDashboard() {
           {activeTab === "analytics" && (
             <div>
               <div style={s.placeSelector}>
-                {places.map((place) => (
-                  <button
-                    key={place.id}
-                    style={selectedPlaceId === place.id ? s.activeTab : s.tab}
-                    onClick={() => setSelectedPlaceId(place.id)}
-                  >
+                {places.map(place => (
+                  <button key={place.id} style={selectedPlaceId === place.id ? s.activeTab : s.tab} onClick={() => setSelectedPlaceId(place.id)}>
                     {place.name}
                   </button>
                 ))}
               </div>
+
               {!selectedPlaceId && <p style={s.empty}>اختار مكان من فوق</p>}
-              {selectedPlaceId && selectedPlaceAnalytics && (() => {
-                const place = places.find((p) => p.id === selectedPlaceId);
-                const {
-                  placeOrders,
-                  uniqueUserIds,
-                  sortedItems,
-                  chartData,
-                  totalRevenue,
-                  peakHour,
-                  returningUsers,
-                } = selectedPlaceAnalytics;
+
+              {selectedPlaceId && selectedPlaceData && (() => {
+                const place = places.find(p => p.id === selectedPlaceId);
+                const { placeOrders, uniqueUserIds, chartData, maxCount, peakHour, mostOrdered, sortedItems, returningUsers, totalRev } = selectedPlaceData;
+
                 return (
                   <div>
                     <div style={s.analyticsHeader}>
                       <h2 style={s.sectionTitle}>{place.name}</h2>
                       <span style={s.typeBadge}>{getTypeLabel(place.type)}</span>
                     </div>
+
                     <div style={s.statsGrid}>
+                      <div style={s.statCard}><p style={s.statN}>{uniqueUserIds.length}</p><p style={s.statL}>عميل</p></div>
+                      <div style={s.statCard}><p style={s.statN}>{placeOrders.length}</p><p style={s.statL}>طلب</p></div>
                       <div style={s.statCard}>
-                        <p style={s.statN}>{uniqueUserIds.length}</p>
-                        <p style={s.statL}>عميل</p>
+                        <p style={s.statN}>{uniqueUserIds.length > 0 ? ((returningUsers / uniqueUserIds.length) * 100).toFixed(0) : 0}%</p>
+                        <p style={s.statL}>Retention</p>
                       </div>
-                      <div style={s.statCard}>
-                        <p style={s.statN}>{placeOrders.length}</p>
-                        <p style={s.statL}>طلب</p>
-                      </div>
-                      <div style={s.statCard}>
-                        <p style={s.statN}>{returningUsers}</p>
-                        <p style={s.statL}>رجع تاني</p>
-                      </div>
-                      <div style={s.statCard}>
-                        <p style={s.statN}>{totalRevenue}</p>
-                        <p style={s.statL}>جنيه مكسب</p>
-                      </div>
+                      <div style={s.statCard}><p style={s.statN}>{totalRev}</p><p style={s.statL}>جنيه مكسب</p></div>
                     </div>
-                    {peakHour && (
+
+                    {(peakHour || mostOrdered) && (
                       <div style={s.insightCard}>
                         <p style={s.insightTitle}>💡 ذكاء السيستم</p>
-                        <p style={s.insightText}>
-                          وقت الذروة: الساعة {peakHour[0]}:00 ({peakHour[1]} طلب)
-                        </p>
-                        {returningUsers > 0 && (
+                        {peakHour && (
                           <p style={s.insightText}>
-                            معدل الرجوع: {((returningUsers / uniqueUserIds.length) * 100).toFixed(0)}%
+                            ⏰ وقت الذروة: {peakHour.hour}:00 — {Number(peakHour.hour) + 1}:00 ({peakHour.count} طلب)
                           </p>
                         )}
-                        {sortedItems[0] && (
+                        {mostOrdered && (
                           <p style={s.insightText}>
-                            الأكتر طلباً: {sortedItems[0][0]} ({sortedItems[0][1]} مرة)
+                            ⭐ الأكتر طلباً: {mostOrdered.item} ({mostOrdered.count} مرة من أصل {placeOrders.length})
+                          </p>
+                        )}
+                        {uniqueUserIds.length > 0 && (
+                          <p style={s.insightText}>
+                            🔄 متوسط الزيارات: {(placeOrders.length / uniqueUserIds.length).toFixed(1)} زيارة لكل عميل
                           </p>
                         )}
                       </div>
                     )}
+
                     <div style={s.chartCard}>
                       <div style={s.chartHeader}>
                         <p style={s.subTitle}>الطلبات عبر الوقت</p>
                         <div style={s.rangeButtons}>
-                          {[
-                            { key: "week", label: "أسبوع" },
-                            { key: "month", label: "شهر" },
-                            { key: "all", label: "الكل" },
-                          ].map((r) => (
-                            <button
-                              key={r.key}
-                              style={chartRange === r.key ? s.activeRange : s.range}
-                              onClick={() => setChartRange(r.key)}
-                            >
-                              {r.label}
-                            </button>
+                          {[{ key: "week", label: "أسبوع" }, { key: "month", label: "شهر" }, { key: "all", label: "الكل" }].map(r => (
+                            <button key={r.key} style={chartRange === r.key ? s.activeRange : s.range} onClick={() => setChartRange(r.key)}>{r.label}</button>
                           ))}
                         </div>
                       </div>
                       {chartData.length === 0 ? (
-                        <p style={s.empty}>مفيش بيانات</p>
+                        <p style={s.empty}>مفيش بيانات في الفترة دي</p>
                       ) : (
-                        <div style={s.chartWrapper}>
-                          <div style={s.chart}>
-                            {chartData.map((d, i) => (
-                              <div
-                                key={i}
-                                style={s.chartCol}
-                                title={`${d.fullDate}: ${d.count} طلب`}
-                              >
-                                <div style={s.barWrapper}>
-                                  <div
-                                    style={{
-                                      ...s.bar,
-                                      height: `${Math.max(
-                                        (d.count / maxCount) * 100,
-                                        d.count > 0 ? 5 : 0
-                                      )}%`,
-                                    }}
-                                  >
-                                    {d.count > 0 && chartData.length <= 30 && (
-                                      <span style={s.barLabel}>{d.count}</span>
-                                    )}
+                        <div>
+                          <div style={s.chartWrapper}>
+                            <div style={{ ...s.chart, minWidth: chartData.length > 30 ? `${chartData.length * 12}px` : "100%" }}>
+                              {chartData.map((d, i) => (
+                                <div key={i} style={s.chartCol} title={`${d.fullDate}: ${d.count} طلب`}>
+                                  <div style={s.barWrapper}>
+                                    <div style={{ ...s.bar, height: `${Math.max((d.count / maxCount) * 100, d.count > 0 ? 8 : 2)}%`, backgroundColor: d.count > 0 ? "#000" : "#e0e0e0" }}>
+                                      {d.count > 0 && chartData.length <= 14 && <span style={s.barLabel}>{d.count}</span>}
+                                    </div>
                                   </div>
+                                  {chartData.length <= 30 && <p style={s.chartDay}>{d.day}</p>}
                                 </div>
-                                {chartData.length <= 30 && (
-                                  <p style={s.chartDay}>{d.day}</p>
-                                )}
-                              </div>
-                            ))}
+                              ))}
+                            </div>
                           </div>
                           {chartData.length > 30 && (
                             <div style={s.chartFooter}>
-                              <span style={s.chartFooterText}>{chartData[0]?.fullDate}</span>
-                              <span style={s.chartFooterText}>
-                                {chartData[chartData.length - 1]?.fullDate}
-                              </span>
+                              <span style={s.chartFooterText}>من: {chartData[0]?.fullDate}</span>
+                              <span style={s.chartFooterText}>لحد: {chartData[chartData.length - 1]?.fullDate}</span>
                             </div>
                           )}
+                          <p style={s.chartTotal}>إجمالي: {placeOrders.filter(o => {
+                            if (chartRange === "all") return true;
+                            const days = chartRange === "week" ? 7 : 30;
+                            const cutoff = new Date();
+                            cutoff.setDate(cutoff.getDate() - days);
+                            return new Date(o.created_at) >= cutoff;
+                          }).length} طلب في الفترة دي</p>
                         </div>
                       )}
                     </div>
+
                     {sortedItems.length > 0 && (
                       <div style={s.card}>
-                        <p style={s.subTitle}>الطلبات الأكتر تكراراً</p>
-                        {sortedItems.slice(0, 5).map(([item, count]) => (
+                        <p style={s.subTitle}>الطلبات مرتبة من الأكتر للأقل</p>
+                        {sortedItems.map(([item, count], idx) => (
                           <div key={item} style={s.itemRow}>
+                            <span style={s.itemRank}>#{idx + 1}</span>
                             <span style={s.itemName}>{item}</span>
                             <div style={s.itemRight}>
-                              <div
-                                style={{
-                                  ...s.itemBar,
-                                  width: `${(count / sortedItems[0][1]) * 100}%`,
-                                }}
-                              />
-                              <span style={s.itemCount}>{count} مرة</span>
+                              <div style={{ ...s.itemBar, width: `${(count / sortedItems[0][1]) * 60}px` }} />
+                              <span style={s.itemCount}>{count} ({((count / placeOrders.length) * 100).toFixed(0)}%)</span>
                             </div>
                           </div>
                         ))}
                       </div>
                     )}
+
                     <div style={s.card}>
                       <p style={s.subTitle}>العملاء ({uniqueUserIds.length})</p>
-                      {uniqueUserIds.map((userId) => {
-                        const user = users.find((u) => u.id === userId);
-                        const userOrders = placeOrders.filter((o) => o.user_id === userId);
+                      {uniqueUserIds.length === 0 && <p style={s.empty}>مفيش عملاء لسه</p>}
+                      {uniqueUserIds.map(userId => {
+                        const user = users.find(u => u.id === userId);
+                        const userOrders = placeOrders.filter(o => o.user_id === userId).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
                         const lastVisit = userOrders[0]?.created_at;
-                        const userItems = userOrders.map((o) => o.item).filter(Boolean);
-                        const mostFrequent = userItems.sort(
-                          (a, b) =>
-                            userItems.filter((v) => v === b).length -
-                            userItems.filter((v) => v === a).length
-                        )[0];
-                        const daysSinceLastVisit = lastVisit
-                          ? Math.floor((new Date() - new Date(lastVisit)) / (1000 * 60 * 60 * 24))
-                          : null;
+                        const daysSince = lastVisit ? Math.floor((new Date() - new Date(lastVisit)) / (1000 * 60 * 60 * 24)) : null;
+                        const userItemCounts = {};
+                        userOrders.forEach(o => { if (o.item) userItemCounts[o.item] = (userItemCounts[o.item] || 0) + 1; });
+                        const favItem = Object.entries(userItemCounts).sort((a, b) => b[1] - a[1])[0];
+                        const totalSpent = userOrders.reduce((sum, o) => sum + (o.price || 0), 0);
+                        const totalSavedUser = userOrders.reduce((sum, o) => sum + (o.discount || 0), 0);
+
                         return user ? (
-                          <div key={userId} style={s.userRow}>
-                            <div>
-                              <p style={s.userName}>{user.name}</p>
-                              <p style={s.userPhone}>{user.phone}</p>
-                              {mostFrequent && <p style={s.userFav}>⭐ {mostFrequent}</p>}
-                            </div>
-                            <div style={{ textAlign: "left" }}>
-                              <p style={s.userVisits}>{userOrders.length} زيارة</p>
-                              {daysSinceLastVisit !== null && (
-                                <p
-                                  style={{
-                                    ...s.userDate,
-                                    color: daysSinceLastVisit > 7 ? "#ff4444" : "#999",
-                                  }}
-                                >
-                                  {daysSinceLastVisit === 0
-                                    ? "النهارده"
-                                    : `${daysSinceLastVisit} يوم`}
+                          <div key={userId} style={s.userCard}>
+                            <div style={s.userCardTop}>
+                              <div>
+                                <p style={s.userName}>{user.name}</p>
+                                <p style={s.userPhone}>{user.phone}</p>
+                              </div>
+                              <div style={{ textAlign: "left" }}>
+                                <p style={s.userVisits}>{userOrders.length} زيارة</p>
+                                <p style={{ ...s.userDate, color: daysSince > 7 ? "#ff4444" : daysSince === 0 ? "#00aa00" : "#999" }}>
+                                  {daysSince === null ? "" : daysSince === 0 ? "النهارده" : `${daysSince} يوم مضى`}
                                 </p>
-                              )}
+                              </div>
+                            </div>
+                            <div style={s.userStats}>
+                              {favItem && <span style={s.userTag}>⭐ {favItem[0]}</span>}
+                              <span style={s.userTag}>دفع {totalSpent} جنيه</span>
+                              <span style={s.userTag}>وفّر {totalSavedUser} جنيه</span>
                             </div>
                           </div>
                         ) : null;
@@ -601,27 +491,21 @@ export default function AdminDashboard() {
 
           {activeTab === "notifications" && (
             <div>
-              <div style={s.ruleActions}>
-                <button style={s.btn} onClick={runSmartRules}>
-                  تشغيل Smart Rules دلوقتي
-                </button>
+              <div style={{ marginBottom: "16px" }}>
+                <button style={s.btn} onClick={runSmartRules}>تشغيل Smart Rules دلوقتي</button>
               </div>
               {notifications.length === 0 ? (
-                <p style={s.empty}>مفيش إشعارات دلوقتي</p>
+                <p style={s.empty}>مفيش إشعارات دلوقتي — اضغط "تشغيل Smart Rules" الأول</p>
               ) : (
-                notifications.map((n) => (
+                notifications.map(n => (
                   <div key={n.id} style={s.card}>
                     <div style={s.cardRow}>
                       <span style={s.cardMain}>{n.users?.name}</span>
                       <span style={s.cardSub}>{n.users?.phone}</span>
                     </div>
                     <p style={s.notifMessage}>{n.message}</p>
-                    <p style={s.cardDate}>
-                      {new Date(n.created_at).toLocaleDateString("ar-EG")}
-                    </p>
-                    <button style={s.sentBtn} onClick={() => markNotificationSent(n.id)}>
-                      ✓ تم الإرسال على واتساب
-                    </button>
+                    <p style={s.cardDate}>{new Date(n.created_at).toLocaleDateString("ar-EG")}</p>
+                    <button style={s.sentBtn} onClick={() => markNotificationSent(n.id)}>✓ تم الإرسال على واتساب</button>
                   </div>
                 ))
               )}
@@ -630,73 +514,53 @@ export default function AdminDashboard() {
 
           {activeTab === "otps" && (
             <div>
-              {otps.length === 0 ? (
-                <p style={s.empty}>مفيش OTPs دلوقتي</p>
-              ) : (
-                otps.map((o) => (
-                  <div key={o.id} style={s.card}>
-                    <div style={s.cardRow}>
-                      <span style={s.cardMain}>{o.phone}</span>
-                      <span style={s.otpCode}>{o.otp}</span>
-                    </div>
-                    <p style={s.cardSub}>
-                      {new Date(o.created_at).toLocaleTimeString("ar-EG")}
-                    </p>
+              {otps.length === 0 ? <p style={s.empty}>مفيش OTPs دلوقتي</p> : otps.map(o => (
+                <div key={o.id} style={s.card}>
+                  <div style={s.cardRow}>
+                    <span style={s.cardMain}>{o.phone}</span>
+                    <span style={s.otpCode}>{o.otp}</span>
                   </div>
-                ))
-              )}
+                  <p style={s.cardSub}>{new Date(o.created_at).toLocaleTimeString("ar-EG")}</p>
+                </div>
+              ))}
             </div>
           )}
 
           {activeTab === "users" && (
             <div>
-              {users.length === 0 ? (
-                <p style={s.empty}>مفيش مستخدمين</p>
-              ) : (
-                users.map((u) => (
-                  <div key={u.id} style={s.card}>
-                    <div style={s.cardRow}>
-                      <span style={s.cardMain}>{u.name}</span>
-                      <span style={s.cardSub}>{u.phone}</span>
-                    </div>
-                    <div style={s.cardRow}>
-                      <span style={s.cardDate}>
-                        {new Date(u.created_at).toLocaleDateString("ar-EG")}
-                      </span>
-                      <span style={s.cardSub}>
-                        طلبات: {orders.filter((o) => o.user_id === u.id).length}
-                      </span>
-                    </div>
+              {users.length === 0 ? <p style={s.empty}>مفيش مستخدمين</p> : users.map(u => (
+                <div key={u.id} style={s.card}>
+                  <div style={s.cardRow}>
+                    <span style={s.cardMain}>{u.name}</span>
+                    <span style={s.cardSub}>{u.phone}</span>
                   </div>
-                ))
-              )}
+                  <div style={s.cardRow}>
+                    <span style={s.cardDate}>{new Date(u.created_at).toLocaleDateString("ar-EG")}</span>
+                    <span style={s.cardSub}>طلبات: {orders.filter(o => o.user_id === u.id).length}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
           {activeTab === "orders" && (
             <div>
-              {orders.length === 0 ? (
-                <p style={s.empty}>مفيش طلبات</p>
-              ) : (
-                orders.map((o) => (
-                  <div key={o.id} style={s.card}>
-                    <div style={s.cardRow}>
-                      <span style={s.cardMain}>{o.users?.name}</span>
-                      <span style={s.savedBadge}>وفّر {o.discount} جنيه</span>
-                    </div>
-                    <div style={s.cardRow}>
-                      <span style={s.cardSub}>{o.places?.name}</span>
-                      <span style={s.cardSub}>{o.item}</span>
-                    </div>
-                    <div style={s.cardRow}>
-                      <span style={s.cardDate}>
-                        {new Date(o.created_at).toLocaleDateString("ar-EG")}
-                      </span>
-                      <span style={s.cardSub}>{o.price} جنيه</span>
-                    </div>
+              {orders.length === 0 ? <p style={s.empty}>مفيش طلبات</p> : orders.map(o => (
+                <div key={o.id} style={s.card}>
+                  <div style={s.cardRow}>
+                    <span style={s.cardMain}>{o.users?.name}</span>
+                    <span style={s.savedBadge}>وفّر {o.discount} جنيه</span>
                   </div>
-                ))
-              )}
+                  <div style={s.cardRow}>
+                    <span style={s.cardSub}>{o.places?.name}</span>
+                    <span style={s.cardSub}>{o.item}</span>
+                  </div>
+                  <div style={s.cardRow}>
+                    <span style={s.cardDate}>{new Date(o.created_at).toLocaleDateString("ar-EG")}</span>
+                    <span style={s.cardSub}>{o.price} جنيه</span>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -704,49 +568,19 @@ export default function AdminDashboard() {
             <div>
               <div style={s.addCard}>
                 <h2 style={s.sectionTitle}>إضافة مكان جديد</h2>
-                <input
-                  style={s.input}
-                  placeholder="اسم المكان"
-                  value={newPlace.name}
-                  onChange={(e) => setNewPlace({ ...newPlace, name: e.target.value })}
-                />
-                <select
-                  style={s.input}
-                  value={newPlace.type}
-                  onChange={(e) => setNewPlace({ ...newPlace, type: e.target.value })}
-                >
+                <input style={s.input} placeholder="اسم المكان" value={newPlace.name} onChange={e => setNewPlace({ ...newPlace, name: e.target.value })} />
+                <select style={s.input} value={newPlace.type} onChange={e => setNewPlace({ ...newPlace, type: e.target.value })}>
                   <option value="restaurant">مطعم</option>
                   <option value="gym">جيم</option>
                   <option value="beach">شاطئ</option>
                   <option value="court">ملعب</option>
                 </select>
-                <input
-                  style={s.input}
-                  placeholder="كود الكاشير"
-                  value={newPlace.cashier_code}
-                  onChange={(e) =>
-                    setNewPlace({ ...newPlace, cashier_code: e.target.value })
-                  }
-                />
-                <input
-                  style={s.input}
-                  placeholder="قيمة الخصم بالجنيه"
-                  value={newPlace.discount_amount}
-                  onChange={(e) =>
-                    setNewPlace({ ...newPlace, discount_amount: e.target.value })
-                  }
-                />
-                <input
-                  style={s.input}
-                  placeholder="كوميشن الشركة (افتراضي 10 جنيه)"
-                  value={newPlace.commission}
-                  onChange={(e) => setNewPlace({ ...newPlace, commission: e.target.value })}
-                />
-                <button style={s.btn} onClick={handleAddPlace}>
-                  إضافة المكان
-                </button>
+                <input style={s.input} placeholder="كود الكاشير" value={newPlace.cashier_code} onChange={e => setNewPlace({ ...newPlace, cashier_code: e.target.value })} />
+                <input style={s.input} placeholder="قيمة الخصم بالجنيه" value={newPlace.discount_amount} onChange={e => setNewPlace({ ...newPlace, discount_amount: e.target.value })} />
+                <input style={s.input} placeholder="كوميشن الشركة (افتراضي 10 جنيه)" value={newPlace.commission} onChange={e => setNewPlace({ ...newPlace, commission: e.target.value })} />
+                <button style={s.btn} onClick={handleAddPlace}>إضافة المكان</button>
               </div>
-              {places.map((p) => (
+              {places.map(p => (
                 <div key={p.id} style={s.card}>
                   <div style={s.cardRow}>
                     <span style={s.cardMain}>{p.name}</span>
@@ -757,9 +591,7 @@ export default function AdminDashboard() {
                     <span style={s.cardSub}>خصم: {p.discount_amount} جنيه</span>
                   </div>
                   <span style={s.cardSub}>كوميشن: {p.commission} جنيه</span>
-                  <button style={s.deleteBtn} onClick={() => handleDeletePlace(p.id)}>
-                    حذف
-                  </button>
+                  <button style={s.deleteBtn} onClick={() => handleDeletePlace(p.id)}>حذف</button>
                 </div>
               ))}
             </div>
@@ -769,69 +601,34 @@ export default function AdminDashboard() {
             <div>
               <div style={s.addCard}>
                 <h2 style={s.sectionTitle}>إضافة Smart Rule</h2>
-                <select
-                  style={s.input}
-                  value={newRule.rule_type}
-                  onChange={(e) => setNewRule({ ...newRule, rule_type: e.target.value })}
-                >
+                <select style={s.input} value={newRule.rule_type} onChange={e => setNewRule({ ...newRule, rule_type: e.target.value })}>
                   <option value="inactive">مستخدم مش رجع</option>
                   <option value="frequent">مستخدم بيرجع كتير</option>
                 </select>
                 {newRule.rule_type === "inactive" && (
-                  <input
-                    style={s.input}
-                    placeholder="بعد كام يوم من غير استخدام"
-                    value={newRule.days_inactive}
-                    onChange={(e) =>
-                      setNewRule({ ...newRule, days_inactive: e.target.value })
-                    }
-                  />
+                  <input style={s.input} placeholder="بعد كام يوم من غير استخدام" value={newRule.days_inactive} onChange={e => setNewRule({ ...newRule, days_inactive: e.target.value })} />
                 )}
                 {newRule.rule_type === "frequent" && (
-                  <input
-                    style={s.input}
-                    placeholder="بعد كام زيارة"
-                    value={newRule.min_visits}
-                    onChange={(e) => setNewRule({ ...newRule, min_visits: e.target.value })}
-                  />
+                  <input style={s.input} placeholder="بعد كام زيارة" value={newRule.min_visits} onChange={e => setNewRule({ ...newRule, min_visits: e.target.value })} />
                 )}
-                <input
-                  style={s.input}
-                  placeholder="الرسالة اللي هتتبعت للمستخدم"
-                  value={newRule.message}
-                  onChange={(e) => setNewRule({ ...newRule, message: e.target.value })}
-                />
-                <button style={s.btn} onClick={handleAddRule}>
-                  إضافة Rule
-                </button>
+                <input style={s.input} placeholder="الرسالة اللي هتتبعت للمستخدم" value={newRule.message} onChange={e => setNewRule({ ...newRule, message: e.target.value })} />
+                <button style={s.btn} onClick={handleAddRule}>إضافة Rule</button>
               </div>
-              {rules.length === 0 ? (
-                <p style={s.empty}>مفيش rules دلوقتي</p>
-              ) : (
-                rules.map((r) => (
-                  <div key={r.id} style={s.card}>
-                    <div style={s.cardRow}>
-                      <span style={s.cardMain}>
-                        {r.rule_type === "inactive" ? "مستخدم مش رجع" : "مستخدم بيرجع كتير"}
-                      </span>
-                      <span style={r.active ? s.activeBadge : s.inactiveBadge}>
-                        {r.active ? "شغال" : "موقف"}
-                      </span>
-                    </div>
-                    <p style={s.cardSub}>{r.message}</p>
-                    {r.days_inactive && <p style={s.cardDate}>بعد {r.days_inactive} يوم</p>}
-                    {r.min_visits && <p style={s.cardDate}>بعد {r.min_visits} زيارة</p>}
-                    <div style={s.cardRow}>
-                      <button style={s.toggleBtn} onClick={() => handleToggleRule(r.id, r.active)}>
-                        {r.active ? "إيقاف" : "تشغيل"}
-                      </button>
-                      <button style={s.deleteBtn} onClick={() => handleDeleteRule(r.id)}>
-                        حذف
-                      </button>
-                    </div>
+              {rules.length === 0 ? <p style={s.empty}>مفيش rules دلوقتي</p> : rules.map(r => (
+                <div key={r.id} style={s.card}>
+                  <div style={s.cardRow}>
+                    <span style={s.cardMain}>{r.rule_type === "inactive" ? "مستخدم مش رجع" : "مستخدم بيرجع كتير"}</span>
+                    <span style={r.active ? s.activeBadge : s.inactiveBadge}>{r.active ? "شغال" : "موقف"}</span>
                   </div>
-                ))
-              )}
+                  <p style={s.cardSub}>{r.message}</p>
+                  {r.days_inactive && <p style={s.cardDate}>بعد {r.days_inactive} يوم من غير استخدام</p>}
+                  {r.min_visits && <p style={s.cardDate}>بعد {r.min_visits} زيارة</p>}
+                  <div style={{ display: "flex", gap: "8px", marginTop: "8px" }}>
+                    <button style={s.toggleBtn} onClick={() => handleToggleRule(r.id, r.active)}>{r.active ? "إيقاف" : "تشغيل"}</button>
+                    <button style={s.deleteBtn} onClick={() => handleDeleteRule(r.id)}>حذف</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
 
@@ -839,34 +636,16 @@ export default function AdminDashboard() {
             <div style={s.addCard}>
               <h2 style={s.sectionTitle}>إرسال كود خصم</h2>
               <label style={s.label}>اختار المستخدم</label>
-              <select
-                style={s.input}
-                value={selectedUser}
-                onChange={(e) => setSelectedUser(e.target.value)}
-              >
+              <select style={s.input} value={selectedUser} onChange={e => setSelectedUser(e.target.value)}>
                 <option value="">-- اختار مستخدم --</option>
-                {users.map((u) => (
-                  <option key={u.id} value={u.id}>
-                    {u.name} - {u.phone}
-                  </option>
-                ))}
+                {users.map(u => <option key={u.id} value={u.id}>{u.name} - {u.phone}</option>)}
               </select>
               <label style={s.label}>اختار المكان</label>
-              <select
-                style={s.input}
-                value={selectedPlace}
-                onChange={(e) => setSelectedPlace(e.target.value)}
-              >
+              <select style={s.input} value={selectedPlace} onChange={e => setSelectedPlace(e.target.value)}>
                 <option value="">-- اختار مكان --</option>
-                {places.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.name} - خصم {p.discount_amount} جنيه
-                  </option>
-                ))}
+                {places.map(p => <option key={p.id} value={p.id}>{p.name} - خصم {p.discount_amount} جنيه</option>)}
               </select>
-              <button style={s.btn} onClick={sendDiscount}>
-                إرسال كود الخصم
-              </button>
+              <button style={s.btn} onClick={sendDiscount}>إرسال كود الخصم</button>
             </div>
           )}
         </div>
@@ -875,525 +654,106 @@ export default function AdminDashboard() {
   );
 }
 
-// أنماط محسنة مع تركيز خاص على القائمة الجانبية
 const s = {
-  page: {
-    minHeight: "100vh",
-    backgroundColor: "#f8f9fa",
-    display: "flex",
-    direction: "rtl",
-    fontFamily:
-      "'Cairo', 'Tajawal', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif",
-  },
+  app: { minHeight: "100vh", backgroundColor: "#f8f9fa", display: "flex", direction: "rtl", fontFamily: "system-ui, -apple-system, 'Segoe UI', Roboto, 'Cairo', sans-serif" },
 
-  // === Sidebar Styles ===
-  sidebarDesktop: {
-    position: "fixed",
-    top: 0,
-    right: 0,
-    width: "280px",
-    height: "100vh",
-    zIndex: 100,
-    backgroundColor: "#ffffff",
-    boxShadow: "-4px 0 20px rgba(0, 0, 0, 0.05)",
-    borderLeft: "1px solid #eef2f6",
-    transition: "all 0.3s ease",
-  },
+  // Sidebar
+  sidebarDesktop: { position: "fixed", top: 0, right: 0, width: "280px", height: "100vh", zIndex: 100, boxShadow: "-4px 0 20px rgba(0,0,0,0.05)", borderLeft: "1px solid #eef2f6", backgroundColor: "#fff" },
+  sidebarMobileOverlay: { position: "fixed", top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, display: "flex", justifyContent: "flex-end" },
+  backdrop: { position: "absolute", top: 0, left: 0, right: 0, bottom: 0, backgroundColor: "rgba(0,0,0,0.5)", backdropFilter: "blur(2px)" },
+  sidebar: { position: "relative", width: "280px", height: "100%", backgroundColor: "#fff", boxShadow: "-4px 0 20px rgba(0,0,0,0.1)", display: "flex", flexDirection: "column", overflowY: "auto" },
+  sidebarHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", padding: "24px 20px", borderBottom: "1px solid #edf2f7" },
+  logo: { fontSize: "24px", fontWeight: "900", color: "#000", margin: 0 },
+  closeBtn: { background: "none", border: "none", fontSize: "22px", cursor: "pointer", padding: "8px", borderRadius: "12px", color: "#666" },
+  sidebarNav: { flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: "6px" },
+  sidebarItem: { display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "12px 16px", backgroundColor: "transparent", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#1a1a1a", cursor: "pointer", transition: "all 0.2s" },
+  sidebarItemActive: { display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "12px 16px", backgroundColor: "#000", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" },
+  sidebarIcon: { fontSize: "18px", width: "24px", textAlign: "center" },
+  sidebarLabel: { flex: 1, textAlign: "right" },
+  sidebarFooter: { padding: "20px", borderTop: "1px solid #edf2f7" },
+  logoutBtn: { width: "100%", padding: "12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "14px", cursor: "pointer", fontSize: "14px", fontWeight: "600", transition: "all 0.2s" },
 
-  sidebarMobileOverlay: {
-    position: "fixed",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    zIndex: 1000,
-    display: "flex",
-    justifyContent: "flex-end",
-  },
+  // Main content
+  mainDesktop: { flex: 1, marginRight: "280px", width: "calc(100% - 280px)" },
+  mainMobile: { flex: 1, width: "100%" },
+  topBar: { backgroundColor: "#fff", padding: "12px 20px", display: "flex", justifyContent: "space-between", alignItems: "center", borderBottom: "1px solid #eef2f6", position: "sticky", top: 0, zIndex: 99, backdropFilter: "blur(8px)", backgroundColor: "rgba(255,255,255,0.95)" },
+  hamburger: { background: "none", border: "none", fontSize: "28px", cursor: "pointer", padding: "8px", marginLeft: "8px", color: "#000", display: "flex", alignItems: "center", borderRadius: "12px" },
+  pageTitle: { fontSize: "18px", fontWeight: "700", color: "#000", margin: 0, flex: 1, textAlign: "center" },
+  refreshBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
+  content: { padding: "24px", maxWidth: "1280px", margin: "0 auto", width: "100%", boxSizing: "border-box" },
 
-  sidebarBackdrop: {
-    position: "absolute",
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: "rgba(0, 0, 0, 0.5)",
-    backdropFilter: "blur(2px)",
-  },
-
-  sidebarContent: {
-    position: "relative",
-    width: "280px",
-    height: "100%",
-    backgroundColor: "#fff",
-    boxShadow: "-4px 0 20px rgba(0, 0, 0, 0.1)",
-    display: "flex",
-    flexDirection: "column",
-    overflowY: "auto",
-  },
-
-  sidebarHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "24px 20px",
-    borderBottom: "1px solid #edf2f7",
-  },
-
-  sidebarLogo: {
-    fontSize: "24px",
-    fontWeight: "900",
-    color: "#000",
-    margin: 0,
-    letterSpacing: "-0.5px",
-  },
-
-  closeSidebarBtn: {
-    background: "none",
-    border: "none",
-    fontSize: "22px",
-    cursor: "pointer",
-    padding: "8px",
-    borderRadius: "12px",
-    color: "#666",
-    transition: "all 0.2s",
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  sidebarNav: {
-    flex: 1,
-    padding: "16px 12px",
-    display: "flex",
-    flexDirection: "column",
-    gap: "4px",
-  },
-
-  sidebarItem: {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    padding: "12px 16px",
-    backgroundColor: "transparent",
-    border: "none",
-    borderRadius: "14px",
-    fontSize: "14px",
-    fontWeight: "600",
-    color: "#1a1a1a",
-    cursor: "pointer",
-    textAlign: "right",
-    transition: "all 0.2s ease",
-    gap: "12px",
-    fontFamily: "inherit",
-  },
-
-  sidebarItemActive: {
-    display: "flex",
-    alignItems: "center",
-    width: "100%",
-    padding: "12px 16px",
-    backgroundColor: "#000",
-    border: "none",
-    borderRadius: "14px",
-    fontSize: "14px",
-    fontWeight: "600",
-    color: "#fff",
-    cursor: "pointer",
-    textAlign: "right",
-    transition: "all 0.2s ease",
-    gap: "12px",
-    fontFamily: "inherit",
-    boxShadow: "0 4px 12px rgba(0, 0, 0, 0.1)",
-  },
-
-  sidebarItemText: {
-    flex: 1,
-    whiteSpace: "nowrap",
-    overflow: "hidden",
-    textOverflow: "ellipsis",
-  },
-
-  sidebarFooter: {
-    padding: "20px",
-    borderTop: "1px solid #edf2f7",
-    marginTop: "auto",
-  },
-
-  sidebarLogout: {
-    width: "100%",
-    padding: "12px",
-    backgroundColor: "#fff",
-    color: "#000",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: "14px",
-    cursor: "pointer",
-    fontSize: "14px",
-    fontWeight: "600",
-    transition: "all 0.2s",
-    fontFamily: "inherit",
-  },
-
-  // === Main Content ===
-  mainDesktop: {
-    flex: 1,
-    marginRight: "280px",
-    width: "calc(100% - 280px)",
-    minHeight: "100vh",
-  },
-
-  mainMobile: {
-    flex: 1,
-    width: "100%",
-  },
-
-  topBar: {
-    backgroundColor: "#fff",
-    padding: "12px 20px",
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    borderBottom: "1px solid #eef2f6",
-    position: "sticky",
-    top: 0,
-    zIndex: 99,
-    backdropFilter: "blur(8px)",
-    backgroundColor: "rgba(255,255,255,0.95)",
-  },
-
-  hamburgerBtn: {
-    background: "none",
-    border: "none",
-    fontSize: "28px",
-    cursor: "pointer",
-    padding: "8px",
-    marginLeft: "8px",
-    color: "#000",
-    lineHeight: 1,
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    borderRadius: "12px",
-    transition: "background 0.2s",
-  },
-
-  topBarTitle: {
-    fontSize: "18px",
-    fontWeight: "700",
-    color: "#000",
-    margin: 0,
-    flex: 1,
-    textAlign: "center",
-  },
-
-  topBarRefresh: {
-    padding: "6px 14px",
-    backgroundColor: "#fff",
-    color: "#000",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "600",
-    transition: "all 0.2s",
-  },
-
-  content: {
-    padding: "24px",
-    maxWidth: "1280px",
-    margin: "0 auto",
-    width: "100%",
-    boxSizing: "border-box",
-  },
-
-  // rest of the styles remain mostly unchanged but with slight polish
-  statsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))",
-    gap: "16px",
-    marginBottom: "28px",
-  },
-  statCard: {
-    backgroundColor: "#000",
-    color: "#fff",
-    borderRadius: "20px",
-    padding: "20px",
-    textAlign: "center",
-    transition: "transform 0.2s, box-shadow 0.2s",
-  },
+  // باقي الأنماط كما هي (لم تتغير)
+  statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px", marginBottom: "28px" },
+  statCard: { backgroundColor: "#000", color: "#fff", borderRadius: "20px", padding: "20px", textAlign: "center" },
   statN: { fontSize: "28px", fontWeight: "900", marginBottom: "6px" },
-  statL: { fontSize: "12px", opacity: 0.8, letterSpacing: "0.3px" },
+  statL: { fontSize: "12px", opacity: 0.8 },
   statsRow: { display: "flex", gap: "12px", marginTop: "14px", flexWrap: "wrap" },
-  miniStat: {
-    flex: "1 1 70px",
-    backgroundColor: "#f8f9fa",
-    borderRadius: "14px",
-    padding: "10px",
-    textAlign: "center",
-  },
+  miniStat: { flex: "1 1 70px", backgroundColor: "#f8f9fa", borderRadius: "14px", padding: "10px", textAlign: "center" },
   miniN: { fontSize: "18px", fontWeight: "800", color: "#000" },
   miniL: { fontSize: "10px", color: "#666" },
-  card: {
-    backgroundColor: "#fff",
-    border: "1px solid #edf2f7",
-    borderRadius: "20px",
-    padding: "18px",
-    marginBottom: "16px",
-    transition: "box-shadow 0.2s",
-  },
-  cardRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "8px",
-    flexWrap: "wrap",
-    gap: "8px",
-  },
+  card: { backgroundColor: "#fff", border: "1px solid #edf2f7", borderRadius: "20px", padding: "18px", marginBottom: "16px" },
+  cardRow: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "8px", flexWrap: "wrap", gap: "8px" },
   cardMain: { fontSize: "16px", fontWeight: "700", color: "#000" },
   cardSub: { fontSize: "12px", color: "#64748b" },
   cardDate: { fontSize: "11px", color: "#94a3b8" },
-  otpCode: {
-    fontSize: "22px",
-    fontWeight: "900",
-    letterSpacing: "4px",
-    color: "#000",
-    wordBreak: "break-all",
-  },
-  savedBadge: {
-    backgroundColor: "#000",
-    color: "#fff",
-    padding: "4px 12px",
-    borderRadius: "40px",
-    fontSize: "11px",
-    fontWeight: "600",
-  },
-  typeBadge: {
-    backgroundColor: "#f1f5f9",
-    color: "#1e293b",
-    padding: "4px 12px",
-    borderRadius: "40px",
-    fontSize: "11px",
-    fontWeight: "600",
-  },
-  activeBadge: {
-    backgroundColor: "#10b981",
-    color: "#fff",
-    padding: "4px 12px",
-    borderRadius: "40px",
-    fontSize: "11px",
-    fontWeight: "600",
-  },
-  inactiveBadge: {
-    backgroundColor: "#f1f5f9",
-    color: "#64748b",
-    padding: "4px 12px",
-    borderRadius: "40px",
-    fontSize: "11px",
-    fontWeight: "600",
-  },
-  addCard: {
-    backgroundColor: "#fff",
-    border: "1px solid #edf2f7",
-    borderRadius: "24px",
-    padding: "24px",
-    marginBottom: "20px",
-  },
+  otpCode: { fontSize: "22px", fontWeight: "900", letterSpacing: "4px", color: "#000" },
+  savedBadge: { backgroundColor: "#000", color: "#fff", padding: "4px 12px", borderRadius: "40px", fontSize: "11px", fontWeight: "600" },
+  typeBadge: { backgroundColor: "#f1f5f9", color: "#1e293b", padding: "4px 12px", borderRadius: "40px", fontSize: "11px", fontWeight: "600" },
+  activeBadge: { backgroundColor: "#10b981", color: "#fff", padding: "4px 12px", borderRadius: "40px", fontSize: "11px", fontWeight: "600" },
+  inactiveBadge: { backgroundColor: "#f1f5f9", color: "#64748b", padding: "4px 12px", borderRadius: "40px", fontSize: "11px", fontWeight: "600" },
+  addCard: { backgroundColor: "#fff", border: "1px solid #edf2f7", borderRadius: "24px", padding: "24px", marginBottom: "20px" },
   sectionTitle: { fontSize: "18px", fontWeight: "700", color: "#000", marginBottom: "20px" },
   label: { fontSize: "13px", fontWeight: "600", color: "#000", marginBottom: "6px", display: "block" },
-  input: {
-    width: "100%",
-    padding: "12px 16px",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: "16px",
-    fontSize: "14px",
-    marginBottom: "16px",
-    outline: "none",
-    textAlign: "right",
-    boxSizing: "border-box",
-    backgroundColor: "#fff",
-    transition: "border-color 0.2s",
-  },
-  btn: {
-    width: "100%",
-    padding: "14px",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "none",
-    borderRadius: "16px",
-    fontSize: "15px",
-    fontWeight: "700",
-    cursor: "pointer",
-    transition: "all 0.2s",
-  },
-  deleteBtn: {
-    padding: "6px 16px",
-    backgroundColor: "#fff",
-    color: "#ef4444",
-    border: "1.5px solid #ef4444",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "600",
-    transition: "all 0.2s",
-  },
-  toggleBtn: {
-    padding: "6px 16px",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "none",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "600",
-  },
+  input: { width: "100%", padding: "12px 16px", border: "1.5px solid #e2e8f0", borderRadius: "16px", fontSize: "14px", marginBottom: "16px", outline: "none", textAlign: "right", boxSizing: "border-box", backgroundColor: "#fff" },
+  btn: { width: "100%", padding: "14px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "16px", fontSize: "15px", fontWeight: "700", cursor: "pointer" },
+  deleteBtn: { padding: "6px 16px", backgroundColor: "#fff", color: "#ef4444", border: "1.5px solid #ef4444", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
+  toggleBtn: { padding: "6px 16px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
   empty: { textAlign: "center", padding: "48px", color: "#94a3b8" },
   placeSelector: { display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" },
-  analyticsHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "20px",
-    flexWrap: "wrap",
-  },
-  insightCard: {
-    backgroundColor: "#000",
-    color: "#fff",
-    borderRadius: "20px",
-    padding: "18px",
-    marginBottom: "16px",
-  },
+  analyticsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap" },
+  insightCard: { backgroundColor: "#000", color: "#fff", borderRadius: "20px", padding: "18px", marginBottom: "16px" },
   insightTitle: { fontSize: "15px", fontWeight: "700", marginBottom: "10px" },
   insightText: { fontSize: "13px", opacity: 0.85, marginBottom: "6px" },
-  chartCard: {
-    backgroundColor: "#fff",
-    border: "1px solid #edf2f7",
-    borderRadius: "20px",
-    padding: "20px",
-    marginBottom: "16px",
-    overflowX: "auto",
-  },
-  chartHeader: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: "16px",
-    flexWrap: "wrap",
-    gap: "12px",
-  },
+  chartCard: { backgroundColor: "#fff", border: "1px solid #edf2f7", borderRadius: "20px", padding: "20px", marginBottom: "16px", overflowX: "auto" },
+  chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" },
   rangeButtons: { display: "flex", gap: "8px", flexWrap: "wrap" },
-  range: {
-    padding: "6px 14px",
-    backgroundColor: "#fff",
-    color: "#000",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "600",
-  },
-  activeRange: {
-    padding: "6px 14px",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "1.5px solid #000",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "12px",
-    fontWeight: "600",
-  },
+  range: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
+  activeRange: { padding: "6px 14px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
   chartWrapper: { width: "100%", overflowX: "auto" },
-  chart: { display: "flex", alignItems: "flex-end", gap: "6px", height: "130px", minWidth: "280px" },
-  chartCol: {
-    flex: "0 0 auto",
-    minWidth: "20px",
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    height: "100%",
-    cursor: "pointer",
-  },
+  chart: { display: "flex", alignItems: "flex-end", gap: "6px", height: "130px" },
+  chartCol: { flex: "0 0 auto", minWidth: "20px", display: "flex", flexDirection: "column", alignItems: "center", height: "100%", cursor: "pointer" },
   barWrapper: { flex: 1, display: "flex", alignItems: "flex-end", width: "100%" },
-  bar: {
-    width: "100%",
-    backgroundColor: "#000",
-    borderRadius: "6px 6px 0 0",
-    minHeight: "2px",
-    display: "flex",
-    alignItems: "flex-start",
-    justifyContent: "center",
-    transition: "height 0.3s",
-  },
+  bar: { width: "100%", borderRadius: "6px 6px 0 0", minHeight: "2px", display: "flex", alignItems: "flex-start", justifyContent: "center", transition: "height 0.3s" },
   barLabel: { fontSize: "8px", color: "#fff", marginTop: "2px" },
-  chartDay: { fontSize: "8px", color: "#64748b", marginTop: "4px" },
+  chartDay: { fontSize: "8px", color: "#64748b", marginTop: "4px", textAlign: "center" },
   chartFooter: { display: "flex", justifyContent: "space-between", marginTop: "8px" },
   chartFooterText: { fontSize: "10px", color: "#94a3b8" },
+  chartTotal: { fontSize: "12px", color: "#666", textAlign: "center", marginTop: "8px" },
   subTitle: { fontSize: "14px", fontWeight: "700", color: "#000", marginBottom: "14px" },
-  itemRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "10px 0",
-    borderBottom: "1px solid #f1f5f9",
-    flexWrap: "wrap",
-    gap: "8px",
-  },
+  itemRow: { display: "flex", alignItems: "center", padding: "10px 0", borderBottom: "1px solid #f1f5f9", gap: "8px" },
+  itemRank: { fontSize: "12px", fontWeight: "700", color: "#999", minWidth: "28px" },
   itemName: { fontSize: "13px", color: "#000", fontWeight: "500", flex: 1 },
   itemRight: { display: "flex", alignItems: "center", gap: "12px" },
-  itemBar: { height: "6px", backgroundColor: "#000", borderRadius: "10px", maxWidth: "90px" },
-  itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "50px", textAlign: "left" },
-  userRow: {
-    display: "flex",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: "14px 0",
-    borderBottom: "1px solid #f1f5f9",
-    flexWrap: "wrap",
-    gap: "12px",
-  },
+  itemBar: { height: "6px", backgroundColor: "#000", borderRadius: "10px" },
+  itemCount: { fontSize: "12px", fontWeight: "700", color: "#000", minWidth: "70px", textAlign: "left" },
+  userCard: { border: "1px solid #f0f0f0", borderRadius: "14px", padding: "14px", marginBottom: "10px" },
+  userCardTop: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "10px" },
   userName: { fontSize: "15px", fontWeight: "700", color: "#000" },
   userPhone: { fontSize: "12px", color: "#64748b", marginTop: "2px" },
-  userFav: { fontSize: "11px", color: "#f59e0b", marginTop: "4px" },
-  userVisits: { fontSize: "14px", fontWeight: "700", color: "#000" },
-  userDate: { fontSize: "11px", color: "#94a3b8" },
+  userVisits: { fontSize: "14px", fontWeight: "700", color: "#000", textAlign: "left" },
+  userDate: { fontSize: "11px", textAlign: "left" },
+  userStats: { display: "flex", gap: "8px", flexWrap: "wrap" },
+  userTag: { backgroundColor: "#f5f5f5", color: "#000", padding: "4px 10px", borderRadius: "20px", fontSize: "11px" },
   notifMessage: { fontSize: "14px", color: "#000", margin: "10px 0", fontWeight: "600", lineHeight: 1.5 },
-  sentBtn: {
-    marginTop: "10px",
-    padding: "8px 18px",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "none",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "600",
-  },
-  ruleActions: { marginBottom: "20px" },
-  tab: {
-    padding: "8px 16px",
-    backgroundColor: "#fff",
-    color: "#000",
-    border: "1.5px solid #e2e8f0",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "600",
-  },
-  activeTab: {
-    padding: "8px 16px",
-    backgroundColor: "#000",
-    color: "#fff",
-    border: "1.5px solid #000",
-    borderRadius: "40px",
-    cursor: "pointer",
-    fontSize: "13px",
-    fontWeight: "600",
-  },
+  sentBtn: { marginTop: "10px", padding: "8px 18px", backgroundColor: "#000", color: "#fff", border: "none", borderRadius: "40px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
+  tab: { padding: "8px 16px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "40px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
+  activeTab: { padding: "8px 16px", backgroundColor: "#000", color: "#fff", border: "1.5px solid #000", borderRadius: "40px", cursor: "pointer", fontSize: "13px", fontWeight: "600" },
 };
 
-// إضافة hover effects و media queries (سيتم تطبيقها تلقائياً عبر JavaScript لأن المكون يتم تحميله في المتصفح)
 if (typeof window !== "undefined") {
   const styleTag = document.createElement("style");
   styleTag.textContent = `
+    button { transition: all 0.2s ease; }
     button:hover { opacity: 0.9; transform: translateY(-1px); }
     .sidebar-item:hover { background-color: #f8f9fa; }
     .stat-card:hover { transform: translateY(-4px); box-shadow: 0 12px 20px rgba(0,0,0,0.1); }
