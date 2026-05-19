@@ -2,6 +2,36 @@ import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
+// أيقونة دائرية مجوفة (أبيض من الداخل، أسود من الخارج)
+const OutlineIcon = ({ active = false }) => (
+  <span
+    style={{
+      display: "inline-flex",
+      alignItems: "center",
+      justifyContent: "center",
+      width: "22px",
+      height: "22px",
+      borderRadius: "50%",
+      border: "2px solid currentColor",
+      backgroundColor: active ? "currentColor" : "transparent",
+      marginLeft: "12px",
+      transition: "all 0.2s ease",
+      flexShrink: 0,
+    }}
+  >
+    {active && (
+      <span
+        style={{
+          width: "8px",
+          height: "8px",
+          borderRadius: "50%",
+          backgroundColor: "#fff",
+        }}
+      />
+    )}
+  </span>
+);
+
 export default function AdminDashboard() {
   const [otps, setOtps] = useState([]);
   const [users, setUsers] = useState([]);
@@ -227,15 +257,15 @@ export default function AdminDashboard() {
   const totalSaved = orders.reduce((sum, o) => sum + (o.discount || 0), 0);
 
   const tabs = [
-    { key: "overview", label: "نظرة عامة", icon: "📊" },
-    { key: "analytics", label: "تحليلات", icon: "📈" },
-    { key: "notifications", label: `إشعارات (${notifications.length})`, icon: "🔔" },
-    { key: "otps", label: `OTPs (${otps.length})`, icon: "🔑" },
-    { key: "users", label: `المستخدمين (${users.length})`, icon: "👥" },
-    { key: "orders", label: `الطلبات (${orders.length})`, icon: "🛒" },
-    { key: "places", label: `الأماكن (${places.length})`, icon: "📍" },
-    { key: "rules", label: `Smart Rules (${rules.length})`, icon: "⚙️" },
-    { key: "discount", label: "إرسال خصم", icon: "🎁" },
+    { key: "overview", label: "نظرة عامة" },
+    { key: "analytics", label: "تحليلات" },
+    { key: "notifications", label: `إشعارات (${notifications.length})` },
+    { key: "otps", label: `OTPs (${otps.length})` },
+    { key: "users", label: `المستخدمين (${users.length})` },
+    { key: "orders", label: `الطلبات (${orders.length})` },
+    { key: "places", label: `الأماكن (${places.length})` },
+    { key: "rules", label: `Smart Rules (${rules.length})` },
+    { key: "discount", label: "إرسال خصم" },
   ];
 
   const selectedPlaceData = selectedPlaceId ? (() => {
@@ -275,13 +305,13 @@ export default function AdminDashboard() {
                     if (isMobile) setSidebarOpen(false);
                   }}
                 >
-                  <span style={s.sidebarIcon}>{tab.icon}</span>
+                  <OutlineIcon active={activeTab === tab.key} />
                   <span style={s.sidebarLabel}>{tab.label}</span>
                 </button>
               ))}
             </div>
             <div style={s.sidebarFooter}>
-              <button style={s.logoutBtn} onClick={handleLogout}>🚪 خروج</button>
+              <button style={s.logoutBtn} onClick={handleLogout}>خروج</button>
             </div>
           </div>
         </div>
@@ -367,20 +397,23 @@ export default function AdminDashboard() {
 
                     {(peakHour || mostOrdered) && (
                       <div style={s.insightCard}>
-                        <p style={s.insightTitle}>💡 ذكاء السيستم</p>
+                        <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "10px" }}>
+                          <OutlineIcon active={false} />
+                          <p style={s.insightTitle}>ذكاء السيستم</p>
+                        </div>
                         {peakHour && (
                           <p style={s.insightText}>
-                            ⏰ وقت الذروة: {peakHour.hour}:00 — {Number(peakHour.hour) + 1}:00 ({peakHour.count} طلب)
+                            وقت الذروة: {peakHour.hour}:00 — {Number(peakHour.hour) + 1}:00 ({peakHour.count} طلب)
                           </p>
                         )}
                         {mostOrdered && (
                           <p style={s.insightText}>
-                            ⭐ الأكتر طلباً: {mostOrdered.item} ({mostOrdered.count} مرة من أصل {placeOrders.length})
+                            الأكتر طلباً: {mostOrdered.item} ({mostOrdered.count} مرة من أصل {placeOrders.length})
                           </p>
                         )}
                         {uniqueUserIds.length > 0 && (
                           <p style={s.insightText}>
-                            🔄 متوسط الزيارات: {(placeOrders.length / uniqueUserIds.length).toFixed(1)} زيارة لكل عميل
+                            متوسط الزيارات: {(placeOrders.length / uniqueUserIds.length).toFixed(1)} زيارة لكل عميل
                           </p>
                         )}
                       </div>
@@ -475,7 +508,7 @@ export default function AdminDashboard() {
                               </div>
                             </div>
                             <div style={s.userStats}>
-                              {favItem && <span style={s.userTag}>⭐ {favItem[0]}</span>}
+                              {favItem && <span style={s.userTag}>{favItem[0]}</span>}
                               <span style={s.userTag}>دفع {totalSpent} جنيه</span>
                               <span style={s.userTag}>وفّر {totalSavedUser} جنيه</span>
                             </div>
@@ -666,10 +699,9 @@ const s = {
   logo: { fontSize: "24px", fontWeight: "900", color: "#000", margin: 0 },
   closeBtn: { background: "none", border: "none", fontSize: "22px", cursor: "pointer", padding: "8px", borderRadius: "12px", color: "#666" },
   sidebarNav: { flex: 1, padding: "16px 12px", display: "flex", flexDirection: "column", gap: "6px" },
-  sidebarItem: { display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "12px 16px", backgroundColor: "transparent", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#1a1a1a", cursor: "pointer", transition: "all 0.2s" },
-  sidebarItemActive: { display: "flex", alignItems: "center", gap: "12px", width: "100%", padding: "12px 16px", backgroundColor: "#000", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" },
-  sidebarIcon: { fontSize: "18px", width: "24px", textAlign: "center" },
-  sidebarLabel: { flex: 1, textAlign: "right" },
+  sidebarItem: { display: "flex", alignItems: "center", width: "100%", padding: "12px 16px", backgroundColor: "transparent", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#1a1a1a", cursor: "pointer", transition: "all 0.2s" },
+  sidebarItemActive: { display: "flex", alignItems: "center", width: "100%", padding: "12px 16px", backgroundColor: "#000", border: "none", borderRadius: "14px", fontSize: "14px", fontWeight: "600", color: "#fff", cursor: "pointer", boxShadow: "0 4px 12px rgba(0,0,0,0.1)" },
+  sidebarLabel: { flex: 1, textAlign: "right", marginRight: "12px" },
   sidebarFooter: { padding: "20px", borderTop: "1px solid #edf2f7" },
   logoutBtn: { width: "100%", padding: "12px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "14px", cursor: "pointer", fontSize: "14px", fontWeight: "600", transition: "all 0.2s" },
 
@@ -682,7 +714,7 @@ const s = {
   refreshBtn: { padding: "6px 14px", backgroundColor: "#fff", color: "#000", border: "1.5px solid #e2e8f0", borderRadius: "40px", cursor: "pointer", fontSize: "12px", fontWeight: "600" },
   content: { padding: "24px", maxWidth: "1280px", margin: "0 auto", width: "100%", boxSizing: "border-box" },
 
-  // باقي الأنماط كما هي (لم تتغير)
+  // باقي الأنماط
   statsGrid: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(150px, 1fr))", gap: "16px", marginBottom: "28px" },
   statCard: { backgroundColor: "#000", color: "#fff", borderRadius: "20px", padding: "20px", textAlign: "center" },
   statN: { fontSize: "28px", fontWeight: "900", marginBottom: "6px" },
@@ -712,7 +744,7 @@ const s = {
   placeSelector: { display: "flex", gap: "10px", marginBottom: "24px", flexWrap: "wrap" },
   analyticsHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px", flexWrap: "wrap" },
   insightCard: { backgroundColor: "#000", color: "#fff", borderRadius: "20px", padding: "18px", marginBottom: "16px" },
-  insightTitle: { fontSize: "15px", fontWeight: "700", marginBottom: "10px" },
+  insightTitle: { fontSize: "15px", fontWeight: "700", margin: 0 },
   insightText: { fontSize: "13px", opacity: 0.85, marginBottom: "6px" },
   chartCard: { backgroundColor: "#fff", border: "1px solid #edf2f7", borderRadius: "20px", padding: "20px", marginBottom: "16px", overflowX: "auto" },
   chartHeader: { display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", flexWrap: "wrap", gap: "12px" },
