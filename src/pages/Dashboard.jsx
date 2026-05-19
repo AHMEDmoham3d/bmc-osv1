@@ -47,15 +47,15 @@ export default function Dashboard() {
   }
 
   function getTypeLabel(type) {
-    if (type === "restaurant") return "مطعم";
-    if (type === "gym") return "جيم";
-    if (type === "beach") return "شاطئ";
-    if (type === "court") return "ملعب";
+    if (type === "restaurant") return "Restaurant";
+    if (type === "gym") return "Gym";
+    if (type === "beach") return "Beach";
+    if (type === "court") return "Court";
     return type;
   }
 
   function formatDate(d) {
-    return new Date(d).toLocaleDateString("ar-EG", {
+    return new Date(d).toLocaleDateString("en-US", {
       day: "numeric",
       month: "long",
     });
@@ -124,7 +124,7 @@ export default function Dashboard() {
           <div>
             <YawmiLogo className="logo" />
 
-            {user && <p className="greeting">أهلاً، {user.name}</p>}
+            {user && <p className="greeting">Welcome, {user.name}</p>}
           </div>
           <button
             className="logout-btn"
@@ -133,7 +133,7 @@ export default function Dashboard() {
               navigate("/login");
             }}
           >
-            خروج
+            Logout
           </button>
         </div>
 
@@ -143,15 +143,15 @@ export default function Dashboard() {
             <div className="stat-icon">
               <WalletIcon />
             </div>
-            <p className="stat-number">{totalSaved.toLocaleString()} <span className="unit">ج.م</span></p>
-            <p className="stat-label">إجمالي التوفير</p>
+            <p className="stat-number">{totalSaved.toLocaleString()} <span className="unit">EGP</span></p>
+            <p className="stat-label">Total Saved</p>
           </div>
           <div className="stat-card">
             <div className="stat-icon">
               <ReceiptIcon />
             </div>
             <p className="stat-number">{orders.length}</p>
-            <p className="stat-label">عدد الزيارات</p>
+            <p className="stat-label">Total Visits</p>
           </div>
         </div>
 
@@ -159,7 +159,7 @@ export default function Dashboard() {
         {discountCode && (
           <div className="discount-card">
             <div className="discount-header">
-              <span className="discount-badge">كود خصم نشط</span>
+              <span className="discount-badge">Active Discount Code</span>
               <div className="discount-icon-wrapper">
                 <TicketIcon />
               </div>
@@ -168,25 +168,25 @@ export default function Dashboard() {
               <p className="discount-code-text">{discountCode.code}</p>
               <button className="copy-btn" onClick={handleCopyCode}>
                 {copied ? <CheckIcon /> : <CopyIcon />}
-                <span>{copied ? "تم النسخ" : "نسخ"}</span>
+                <span>{copied ? "Copied!" : "Copy"}</span>
               </button>
             </div>
             <p className="discount-place-name">
-              {discountCode.places?.name} • {discountCode.places?.discount_amount} ج.م خصم
+              {discountCode.places?.name} • {discountCode.places?.discount_amount} EGP discount
             </p>
           </div>
         )}
 
         {/* Orders List */}
         <div className="orders-card">
-          <h2 className="section-title">آخر الزيارات</h2>
+          <h2 className="section-title">Recent Visits</h2>
           {orders.length === 0 ? (
             <div className="empty-state">
               <div className="empty-icon-wrapper">
                 <BagIcon />
               </div>
-              <p className="empty-title">لا توجد زيارات حتى الآن</p>
-              <span className="empty-hint">اطلب كود خصم من أي فرع متعاقد</span>
+              <p className="empty-title">No visits yet</p>
+              <span className="empty-hint">Request a discount code from any contracted branch</span>
             </div>
           ) : (
             <div className="orders-list">
@@ -199,9 +199,9 @@ export default function Dashboard() {
                     <time className="order-date">{formatDate(order.created_at)}</time>
                   </div>
                   <div className="savings-box">
-                    <span className="saved-label">وفرت</span>
-                    <strong className="saved-amount">{order.discount} ج.م</strong>
-                    <span className="original-price">{order.price} ج.م</span>
+                    <span className="saved-label">Saved</span>
+                    <strong className="saved-amount">{order.discount} EGP</strong>
+                    <span className="original-price">{order.price} EGP</span>
                   </div>
                 </div>
               ))}

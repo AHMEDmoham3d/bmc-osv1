@@ -2,9 +2,14 @@ export default function YawmiLogo({ className = "", as: Tag = "h1" }) {
   const letters = ["Y", "a", "w", "m", "i"];
 
   return (
-    <Tag className={className} style={{ display: "inline-flex", gap: 0 }}>
+    <Tag className={className} style={{ display: "inline-flex", direction: "ltr" }}>
       <style>{`
-        .yawmi-logo { display: inline-flex; align-items: baseline; gap: 0; }
+        .yawmi-logo { 
+          display: inline-flex; 
+          align-items: baseline; 
+          gap: 0;
+          direction: ltr;
+        }
         .yawmi-logo-letter {
           display: inline-block;
           will-change: transform, opacity;
@@ -44,4 +49,3 @@ export default function YawmiLogo({ className = "", as: Tag = "h1" }) {
     </Tag>
   );
 }
-
