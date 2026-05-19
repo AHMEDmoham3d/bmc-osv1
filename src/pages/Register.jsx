@@ -1,6 +1,26 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import YawmiLogo from "../components/YawmiLogo";
+
+const UserIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+    <circle cx="12" cy="7" r="4" />
+  </svg>
+);
+
+const PhoneIcon = () => (
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
+  </svg>
+);
+
+const ArrowIcon = () => (
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M5 12h14M12 5l7 7-7 7" />
+  </svg>
+);
 
 export default function Register() {
   const [name, setName] = useState("");
@@ -11,7 +31,7 @@ export default function Register() {
 
   async function handleRegister() {
     if (!name || !phone) {
-      setError("من فضلك ادخل الاسم والرقم");
+      setError("Please enter your name and phone number");
       return;
     }
     setLoading(true);
@@ -19,7 +39,7 @@ export default function Register() {
     const otp = Math.floor(1000 + Math.random() * 9000).toString();
     const { error: otpError } = await supabase.from("otps").insert({ phone, otp });
     if (otpError) {
-      setError("حصل خطأ، حاول تاني");
+      setError("Something went wrong, please try again");
       setLoading(false);
       return;
     }
@@ -29,39 +49,23 @@ export default function Register() {
     navigate("/verify");
   }
 
-  // SVG Icons – Hollow outline style
-  const UserIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
-      <circle cx="12" cy="7" r="4" />
-    </svg>
-  );
-
-  const PhoneIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
-    </svg>
-  );
-
-  const ArrowIcon = () => (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M5 12h14M12 5l7 7-7 7" />
-    </svg>
-  );
+  // Icons are defined outside render (see bottom of file)
+  
 
   return (
     <div className="register-page">
       <div className="register-card">
         <div className="logo-wrapper">
-          <h1 className="logo">يومي</h1>
+          <YawmiLogo className="logo" />
+
           <div className="logo-underline"></div>
         </div>
-        <p className="subtitle">وفّر من كل خطوة في يومك</p>
+        <p className="subtitle">Make every step count in your day</p>
 
         <div className="form-group">
           <label className="form-label">
             <UserIcon />
-            <span>الاسم</span>
+            <span>Name</span>
           </label>
           <input
             className="form-input"

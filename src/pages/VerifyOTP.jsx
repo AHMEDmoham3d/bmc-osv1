@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import YawmiLogo from "../components/YawmiLogo";
 
 export default function VerifyOTP() {
   const [otp, setOtp] = useState("");
@@ -26,7 +27,8 @@ export default function VerifyOTP() {
   return (
     <div style={s.page}>
       <div style={s.card}>
-        <h1 style={s.logo}>يومي</h1>
+        <YawmiLogo className="yawmi-logo" as="h1" />
+
         <p style={s.sub}>ادخل الكود اللي اتبعتهولك على واتساب</p>
         <div style={s.form}>
           <label style={s.label}>كود التحقق</label>

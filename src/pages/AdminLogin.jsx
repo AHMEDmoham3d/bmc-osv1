@@ -1,6 +1,39 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import YawmiLogo from "../components/YawmiLogo";
+
+const MailIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="white"
+    stroke="black"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+    <polyline points="22,6 12,13 2,6" />
+  </svg>
+);
+
+const LockIcon = () => (
+  <svg
+    width="20"
+    height="20"
+    viewBox="0 0 24 24"
+    fill="white"
+    stroke="black"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+  </svg>
+);
 
 export default function AdminLogin() {
   const [email, setEmail] = useState("");
@@ -10,41 +43,35 @@ export default function AdminLogin() {
   const navigate = useNavigate();
 
   async function handleLogin() {
-    if (!email || !password) { setError("ادخل الايميل والباسورد"); return; }
-    setLoading(true); setError("");
+    if (!email || !password) {
+      setError("Please enter your email and password");
+      return;
+    }
+    setLoading(true);
+    setError("");
     const { error: loginError } = await supabase.auth.signInWithPassword({ email, password });
-    if (loginError) { setError("الايميل أو الباسورد غلط"); setLoading(false); return; }
+    if (loginError) {
+      setError("Invalid email or password");
+      setLoading(false);
+      return;
+    }
     navigate("/admin/dashboard");
   }
-
-  // SVG Icons – Hollow outline style
-  const MailIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-      <polyline points="22,6 12,13 2,6" />
-    </svg>
-  );
-
-  const LockIcon = () => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-    </svg>
-  );
 
   return (
     <div className="admin-page">
       <div className="admin-card">
         <div className="logo-wrapper">
-          <h1 className="logo">يومي</h1>
+          <YawmiLogo className="logo" />
+
           <div className="logo-underline"></div>
         </div>
-        <p className="subtitle">لوحة التحكم</p>
+        <p className="subtitle">Admin Dashboard</p>
 
         <div className="form-group">
           <label className="form-label">
             <MailIcon />
-            <span>الايميل</span>
+            <span>Email</span>
           </label>
           <input
             className="form-input"
@@ -58,7 +85,7 @@ export default function AdminLogin() {
         <div className="form-group">
           <label className="form-label">
             <LockIcon />
-            <span>الباسورد</span>
+            <span>Password</span>
           </label>
           <input
             className="form-input"
@@ -72,7 +99,7 @@ export default function AdminLogin() {
         {error && <p className="error-message">{error}</p>}
 
         <button className="submit-btn" onClick={handleLogin} disabled={loading}>
-          {loading ? <span className="loading-spinner"></span> : "دخول"}
+          {loading ? <span className="loading-spinner"></span> : "Login"}
         </button>
       </div>
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
+import YawmiLogo from "../components/YawmiLogo";
 
 export default function Dashboard() {
   const [user, setUser] = useState(null);
@@ -121,7 +122,8 @@ export default function Dashboard() {
         {/* Header */}
         <div className="header">
           <div>
-            <h1 className="logo">يومي</h1>
+            <YawmiLogo className="logo" />
+
             {user && <p className="greeting">أهلاً، {user.name}</p>}
           </div>
           <button

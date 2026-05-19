@@ -1,20 +1,14 @@
-# TODO - إعادة تنسيق الواجهة (أبيض/أسود فقط) + Responsive
+## Yawmi UI Translation + Logo Animation
 
-- [x] إنشاء/تحديث نظام ألوان وخطوط عام في `src/index.css` (أبيض/أسود + رمادي).
-
-- [x] تحديث صفحات Auth + Dashboard + Cashier لاستخدام أسلوب موحد responsive.
-
-  - [ ] `src/pages/AdminLogin.jsx`
-  - [x] `src/pages/Register.jsx`
-
-- [x] `src/pages/VerifyOTP.jsx`
-
+- [ ] Create `src/components/YawmiLogo.jsx` with required animation (Y appears first; rest letters exit with smart animation)
+- [ ] Replace all logo occurrences of `يومى` in:
+  - [ ] `src/pages/Login.jsx`
+  - [ ] `src/pages/Register.jsx`
+  - [ ] `src/pages/VerifyOTP.jsx`
   - [ ] `src/pages/Dashboard.jsx`
   - [ ] `src/pages/Cashier.jsx`
-- [ ] تحديث `src/pages/AdminDashboard.jsx` بشكل احترافي:
-  - [ ] Tabs/cards بنظام grid responsive
-  - [ ] تحسين فورم إضافة المكان على الموبايل
-  - [ ] ضبط أحجام خطوط/OTP لتكون مناسبة بدون letterSpacing مبالغ فيه
-- [ ] تشغيل المشروع والتأكد بصريًا على أحجام شاشة مختلفة.
-- [ ] إصلاح أي مشاكل RTL أو overflow.
+  - [ ] `src/pages/AdminLogin.jsx`
+- [ ] Translate all on-site UI text to English in above pages (keep dynamic Supabase values unchanged)
+- [ ] Translate all on-site UI text to English in `src/pages/AdminDashboard.jsx`
+- [ ] Build/test: run `npm run build` and sanity-check routes
 
