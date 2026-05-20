@@ -70,7 +70,7 @@ export default function Register() {
           <input
             className="form-input"
             type="text"
-            placeholder="مثال: أحمد محمود"
+            placeholder="Example: Ahmed Mahmoud"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -79,7 +79,7 @@ export default function Register() {
         <div className="form-group">
           <label className="form-label">
             <PhoneIcon />
-            <span>رقم الموبايل</span>
+            <span>Phone number</span>
           </label>
           <input
             className="form-input"
@@ -97,14 +97,14 @@ export default function Register() {
             <span className="loading-spinner"></span>
           ) : (
             <>
-              سجل دلوقتي
+               Register now
               <ArrowIcon />
             </>
           )}
         </button>
 
         <p className="hint-text">
-          عندك حساب؟ <span className="link-text" onClick={() => navigate("/login")}>ادخل هنا</span>
+         Do you have an account?<span className="link-text" onClick={() => navigate("/login")}> Enter here</span>
         </p>
       </div>
 
