@@ -1,25 +1,32 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
-import YawmiLogo from "../components/YawmiLogo";
 
+// ======================
+// Icons (Black & White)
+// ======================
 const UserIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
     <circle cx="12" cy="7" r="4" />
   </svg>
 );
 
 const PhoneIcon = () => (
-  <svg width="20" height="20" viewBox="0 0 24 24" fill="white" stroke="black" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.362 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.338 1.85.573 2.81.7A2 2 0 0 1 22 16.92z" />
   </svg>
 );
 
 const ArrowIcon = () => (
-  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="black" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
     <path d="M5 12h14M12 5l7 7-7 7" />
   </svg>
+);
+
+// Logo component (simple typography, black/white)
+const YawmiLogo = ({ className = "" }: { className?: string }) => (
+  <span className={`yawmi-logo ${className}`}>Yawmi</span>
 );
 
 export default function Register() {
@@ -30,47 +37,70 @@ export default function Register() {
   const navigate = useNavigate();
 
   async function handleRegister() {
-    if (!name || !phone) {
+    if (!name.trim() || !phone.trim()) {
       setError("Please enter your name and phone number");
       return;
     }
+
     setLoading(true);
     setError("");
-    const otp = Math.floor(1000 + Math.random() * 9000).toString();
-    const { error: otpError } = await supabase.from("otps").insert({ phone, otp });
-    if (otpError) {
-      setError("Something went wrong, please try again");
-      setLoading(false);
-      return;
-    }
-    localStorage.setItem("phone", phone);
-    localStorage.setItem("name", name);
-    setLoading(false);
-    navigate("/verify");
-  }
 
-  // Icons are defined outside render (see bottom of file)
-  
+    try {
+      // Check if user already exists
+      const { data: existing, error: fetchError } = await supabase
+        .from("users")
+        .select("*")
+        .eq("phone", phone.trim())
+        .maybeSingle();
+
+      if (fetchError && fetchError.code !== "PGRST116") {
+        throw new Error(fetchError.message);
+      }
+
+      if (existing) {
+        // User exists → log them in
+        localStorage.setItem("phone", phone.trim());
+        localStorage.setItem("name", existing.name);
+        navigate("/dashboard");
+        return;
+      }
+
+      // Create new user
+      const { error: insertError } = await supabase
+        .from("users")
+        .insert({ name: name.trim(), phone: phone.trim() });
+
+      if (insertError) throw new Error(insertError.message);
+
+      // Store credentials & go to dashboard
+      localStorage.setItem("phone", phone.trim());
+      localStorage.setItem("name", name.trim());
+      navigate("/dashboard");
+    } catch (err: any) {
+      setError(err.message || "Something went wrong. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   return (
     <div className="register-page">
       <div className="register-card">
         <div className="logo-wrapper">
           <YawmiLogo className="logo" />
-
-          <div className="logo-underline"></div>
+          <div className="logo-underline" />
         </div>
         <p className="subtitle">Make every step count in your day</p>
 
         <div className="form-group">
           <label className="form-label">
             <UserIcon />
-            <span>Name</span>
+            <span>Full name</span>
           </label>
           <input
             className="form-input"
             type="text"
-            placeholder="Example: Ahmed Mahmoud"
+            placeholder="Ahmed Mahmoud"
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
@@ -94,21 +124,31 @@ export default function Register() {
 
         <button className="submit-btn" onClick={handleRegister} disabled={loading}>
           {loading ? (
-            <span className="loading-spinner"></span>
+            <span className="loading-spinner" />
           ) : (
             <>
-               Register now
+              Register now
               <ArrowIcon />
             </>
           )}
         </button>
 
         <p className="hint-text">
-         Do you have an account?<span className="link-text" onClick={() => navigate("/login")}> Enter here</span>
+          Already have an account?{" "}
+          <span className="link-text" onClick={() => navigate("/login")}>
+            Sign in
+          </span>
         </p>
       </div>
 
-      <style jsx="true">{`
+      {/* Global styles - clean black & white theme */}
+      <style>{`
+        * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+        }
+
         .register-page {
           min-height: 100vh;
           background: #f5f5f5;
@@ -116,8 +156,7 @@ export default function Register() {
           align-items: center;
           justify-content: center;
           padding: 24px;
-          font-family: 'Inter', 'Cairo', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-          direction: rtl;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, sans-serif;
         }
 
         .register-card {
@@ -155,16 +194,16 @@ export default function Register() {
           margin-bottom: 12px;
         }
 
-        .logo {
+        .yawmi-logo {
           font-size: 56px;
           font-weight: 900;
           letter-spacing: -1.5px;
           color: #000000;
-          margin: 0;
+          display: inline-block;
           line-height: 1;
           background: linear-gradient(135deg, #000000 0%, #2c2c2c 100%);
-          background-clip: text;
           -webkit-background-clip: text;
+          background-clip: text;
           color: #000000;
         }
 
@@ -209,6 +248,7 @@ export default function Register() {
         .form-label svg {
           width: 18px;
           height: 18px;
+          color: #000000;
         }
 
         .form-input {
@@ -221,7 +261,6 @@ export default function Register() {
           background: #ffffff;
           transition: all 0.2s ease;
           outline: none;
-          text-align: right;
           color: #000000;
         }
 
@@ -242,7 +281,7 @@ export default function Register() {
           padding: 8px 14px;
           background: #fff4f4;
           border-radius: 40px;
-          border-right: 2px solid #d32f2f;
+          border-left: 2px solid #d32f2f;
         }
 
         .submit-btn {
@@ -286,7 +325,9 @@ export default function Register() {
         }
 
         @keyframes spin {
-          to { transform: rotate(360deg); }
+          to {
+            transform: rotate(360deg);
+          }
         }
 
         .hint-text {
@@ -316,7 +357,7 @@ export default function Register() {
             padding: 36px 24px;
             border-radius: 36px;
           }
-          .logo {
+          .yawmi-logo {
             font-size: 44px;
           }
           .form-input {
