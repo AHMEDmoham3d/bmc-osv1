@@ -25,7 +25,7 @@ const ArrowIcon = () => (
 );
 
 // Logo component (simple typography, black/white)
-const YawmiLogo = ({ className = "" }: { className?: string }) => (
+const YawmiLogo = ({ className = "" }) => (
   <span className={`yawmi-logo ${className}`}>Yawmi</span>
 );
 
@@ -76,8 +76,8 @@ export default function Register() {
       localStorage.setItem("phone", phone.trim());
       localStorage.setItem("name", name.trim());
       navigate("/dashboard");
-    } catch (err: any) {
-      setError(err.message || "Something went wrong. Please try again.");
+    } catch (err) {
+      setError((err && err.message) || "Something went wrong. Please try again.");
     } finally {
       setLoading(false);
     }
