@@ -330,7 +330,8 @@
 //       `}</style>
 //     </div>
 //   );
-// }import { useState } from "react";
+// }
+import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
@@ -340,7 +341,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   async function handleLogin() {
-    if (!phone) { alert("Please enter your mobile number"); return; }
+    if (!phone) { alert("Enter your mobile number"); return; }
     setLoading(true);
     const { data } = await supabase.from("users").select("*").eq("phone", phone).maybeSingle();
     if (data) {
@@ -359,9 +360,9 @@ export default function Login() {
         <p style={s.sub}>Enter your mobile number</p>
         <input style={s.input} placeholder="01xxxxxxxxx" value={phone} onChange={e => setPhone(e.target.value)} />
         <button style={s.btn} onClick={handleLogin} disabled={loading}>
-          {loading ? "Loading..." : "Login"}
+          {loading ? "In progress...": "Entering"}
         </button>
-        <p style={s.hint}>Not registered? We'll create an account for you automatically</p>
+        <p style={s.hint}>Not registered? We will register you automatically</p>
       </div>
     </div>
   );
