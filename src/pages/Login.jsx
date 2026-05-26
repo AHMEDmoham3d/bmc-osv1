@@ -330,8 +330,7 @@
 //       `}</style>
 //     </div>
 //   );
-// }
-import { useState } from "react";
+// }import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 
@@ -341,7 +340,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   async function handleLogin() {
-    if (!phone) { alert("ادخل رقم موبايلك"); return; }
+    if (!phone) { alert("Please enter your mobile number"); return; }
     setLoading(true);
     const { data } = await supabase.from("users").select("*").eq("phone", phone).maybeSingle();
     if (data) {
@@ -357,12 +356,12 @@ export default function Login() {
     <div style={s.page}>
       <div style={s.container}>
         <h1 style={s.logo}>Yawmi</h1>
-        <p style={s.sub}>ادخل رقم موبايلك</p>
+        <p style={s.sub}>Enter your mobile number</p>
         <input style={s.input} placeholder="01xxxxxxxxx" value={phone} onChange={e => setPhone(e.target.value)} />
         <button style={s.btn} onClick={handleLogin} disabled={loading}>
-          {loading ? "جاري..." : "دخول"}
+          {loading ? "Loading..." : "Login"}
         </button>
-        <p style={s.hint}>مش مسجل؟ هنسجلك تلقائياً</p>
+        <p style={s.hint}>Not registered? We'll create an account for you automatically</p>
       </div>
     </div>
   );
