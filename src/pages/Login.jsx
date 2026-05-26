@@ -331,7 +331,6 @@
 //     </div>
 //   );
 // }
-
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
@@ -344,7 +343,7 @@ export default function Login() {
   async function handleLogin() {
     if (!phone) { alert("ادخل رقم موبايلك"); return; }
     setLoading(true);
-    const { data } = await supabase.from("users").select("*").eq("phone", phone).single();
+    const { data } = await supabase.from("users").select("*").eq("phone", phone).maybeSingle();
     if (data) {
       localStorage.setItem("phone", phone);
       navigate("/dashboard");
