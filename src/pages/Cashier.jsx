@@ -695,7 +695,6 @@
 //     }
 //   }
 // `;
-
 import { useState } from "react";
 import { supabase } from "./supabase";
 
@@ -780,8 +779,35 @@ export default function Cashier() {
     if (!phone) { setError("Please enter the customer mobile number"); return; }
     setLoading(true);
     setError("");
+
+    // Step 1: Check if user is registered in Yawmi
     const { data: userData } = await supabase.from("users").select("*").eq("phone", phone).maybeSingle();
-    if (!userData) { setError("This customer is not registered in Yawmi"); setLoading(false); return; }
+    if (!userData) {
+      setError("This customer is not registered in Yawmi");
+      setLoading(false);
+      return;
+    }
+
+    // Step 2: Check if student info is complete and verified
+    const { data: studentData } = await supabase
+      .from("student_info")
+      .select("*")
+      .eq("user_id", userData.id)
+      .maybeSingle();
+
+    if (!studentData) {
+      setError("This customer has not completed their student info. They must add their university email first.");
+      setLoading(false);
+      return;
+    }
+
+    if (!studentData.verified) {
+      setError("This customer's student account is blocked. Please contact support.");
+      setLoading(false);
+      return;
+    }
+
+    // Step 3: All checks passed — generate or reuse discount code
     setUser(userData);
 
     const { data: existingCode } = await supabase
@@ -923,7 +949,7 @@ export default function Cashier() {
             <div className="user-card">
               <div className="user-info">
                 <p className="user-name">{user.name}</p>
-                <p className="user-registered">✓ Registered customer</p>
+                <p className="user-registered">✓ Verified student</p>
               </div>
               <div className="discount-code-chip">
                 <span className="chip-label">Code</span>
