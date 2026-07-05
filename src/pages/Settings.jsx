@@ -21,6 +21,10 @@ const ALEXANDRIA_UNIVERSITIES = [
 
 const STUDY_YEARS = ["1st Year", "2nd Year", "3rd Year", "4th Year", "5th Year", "6th Year", "Postgraduate"];
 
+function validateEgyptPhone(p) {
+  return /^(01)[0125][0-9]{8}$/.test(p);
+}
+
 function validateEduEmail(email) {
   if (!email || !email.includes("@")) return false;
   const domain = email.split("@")[1]?.toLowerCase();
@@ -34,26 +38,39 @@ function validateEduEmail(email) {
 export default function Settings() {
   const [user, setUser] = useState(null);
   const [studentInfo, setStudentInfo] = useState(null);
+
+  // Profile fields
+  const [name, setName] = useState("");
+  const [newPhone, setNewPhone] = useState("");
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileSuccess, setProfileSuccess] = useState(false);
+  const [profileError, setProfileError] = useState("");
+
+  // Student info fields
   const [eduEmail, setEduEmail] = useState("");
   const [university, setUniversity] = useState("");
   const [studyYear, setStudyYear] = useState("");
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState(false);
+
+  const [loading, setLoading] = useState(true);
   const navigate = useNavigate();
-  const phone = localStorage.getItem("phone");
+  const userId = localStorage.getItem("user_id");
 
   useEffect(() => {
-    if (!phone) { navigate("/login"); return; }
+    if (!userId) { navigate("/login"); return; }
     loadData();
   }, []);
 
   async function loadData() {
     setLoading(true);
-    const { data: userData } = await supabase.from("users").select("*").eq("phone", phone).single();
+    // Fetch all data from Supabase using user_id only
+    const { data: userData } = await supabase.from("users").select("*").eq("id", userId).single();
     setUser(userData);
     if (userData) {
+      setName(userData.name || "");
+      setNewPhone(userData.phone || "");
       const { data: studentData } = await supabase
         .from("student_info").select("*").eq("user_id", userData.id).maybeSingle();
       if (studentData) {
@@ -64,6 +81,48 @@ export default function Settings() {
       }
     }
     setLoading(false);
+  }
+
+  async function handleSaveProfile() {
+    setProfileError("");
+    if (!name.trim()) { setProfileError("Please enter your name"); return; }
+    if (!validateEgyptPhone(newPhone.trim())) { setProfileError("Please enter a valid Egyptian phone number"); return; }
+    setSavingProfile(true);
+
+    // Check if new phone is already used by another user
+    if (newPhone.trim() !== user.phone) {
+      const { data: existingPhone } = await supabase
+        .from("users").select("id")
+        .eq("phone", newPhone.trim())
+        .neq("id", user.id)
+        .maybeSingle();
+      if (existingPhone) {
+        setProfileError("This phone number is already registered to another user");
+        setSavingProfile(false);
+        return;
+      }
+    }
+
+    // Update Supabase only — no localStorage changes needed
+    const { error: updateError } = await supabase
+      .from("users")
+      .update({
+        name: name.trim(),
+        phone: newPhone.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+
+    if (updateError) {
+      setProfileError("Failed to save. Please try again.");
+      setSavingProfile(false);
+      return;
+    }
+
+    setProfileSuccess(true);
+    setSavingProfile(false);
+    setTimeout(() => setProfileSuccess(false), 3000);
+    loadData();
   }
 
   async function handleSave() {
@@ -109,6 +168,7 @@ export default function Settings() {
 
   const emailValid = validateEduEmail(eduEmail.trim().toLowerCase());
   const isComplete = studentInfo?.verified && studentInfo?.edu_email;
+  const phoneValid = validateEgyptPhone(newPhone.trim());
 
   if (loading) {
     return (
@@ -124,73 +184,123 @@ export default function Settings() {
   return (
     <div style={s.page}>
       <div style={s.card}>
+
         <div style={s.header}>
           <button style={s.backBtn} onClick={() => navigate("/dashboard")}>← Back</button>
-          <h1 style={s.title}>Student Info</h1>
+          <h1 style={s.title}>My Settings</h1>
         </div>
 
-        {isComplete ? (
-          <div style={s.successBanner}>
-            <span>✓</span>
-            <div>
-              <p style={s.bannerTitle}>Verified — Ready for discounts</p>
-              <p style={s.bannerSub}>{studentInfo.edu_email}</p>
-            </div>
-          </div>
-        ) : (
-          <div style={s.warningBanner}>
-            <span>!</span>
-            <div>
-              <p style={s.bannerTitle}>Missing information</p>
-              <p style={s.bannerSub}>Complete your info to unlock discounts</p>
-            </div>
-          </div>
-        )}
+        {/* Section 1: Personal Info */}
+        <div style={s.section}>
+          <p style={s.sectionTitle}>Personal Information</p>
 
-        <div style={s.form}>
           <div style={s.field}>
-            <label style={s.label}>University Email</label>
+            <label style={s.label}>Full Name</label>
             <input
-              style={{ ...s.input, borderColor: eduEmail.length > 5 ? (emailValid ? "#00aa00" : "#d32f2f") : "#e0e0e0" }}
-              type="email" placeholder="student@alexu.edu.eg"
-              value={eduEmail} onChange={(e) => setEduEmail(e.target.value)} dir="ltr"
+              style={s.input}
+              type="text"
+              placeholder="Ahmed Mahmoud"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
             />
-            {eduEmail.length > 5 && (
-              <p style={{ fontSize: "12px", color: emailValid ? "#00aa00" : "#d32f2f", margin: "4px 0 0" }}>
-                {emailValid ? "✓ Valid university email" : "✗ Not a university email, must end with .edu.eg"}
+          </div>
+
+          <div style={s.field}>
+            <label style={s.label}>Phone Number (WhatsApp)</label>
+            <input
+              style={{ ...s.input, borderColor: newPhone.length === 11 ? (phoneValid ? "#00aa00" : "#d32f2f") : "#e0e0e0", direction: "ltr" }}
+              type="tel"
+              placeholder="01xxxxxxxxx"
+              value={newPhone}
+              onChange={(e) => setNewPhone(e.target.value.replace(/[^0-9]/g, ""))}
+              maxLength={11}
+              inputMode="numeric"
+            />
+            {newPhone.length === 11 && (
+              <p style={{ fontSize: "12px", color: phoneValid ? "#00aa00" : "#d32f2f", margin: "4px 0 0" }}>
+                {phoneValid ? "✓ Valid Egyptian number" : "✗ Invalid Egyptian number"}
               </p>
             )}
-            <p style={s.hint}>The email issued by your university, not Gmail</p>
           </div>
 
-          <div style={s.field}>
-            <label style={s.label}>University</label>
-            <select style={s.input} value={university} onChange={(e) => setUniversity(e.target.value)}>
-              <option value="">Select your university</option>
-              {ALEXANDRIA_UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
-            </select>
-          </div>
+          {profileError && <p style={s.error}>{profileError}</p>}
+          {profileSuccess && <p style={s.successMsg}>✓ Profile updated successfully</p>}
 
-          <div style={s.field}>
-            <label style={s.label}>Study Year</label>
-            <select style={s.input} value={studyYear} onChange={(e) => setStudyYear(e.target.value)}>
-              <option value="">Select your year</option>
-              {STUDY_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
-            </select>
-          </div>
-
-          {error && <p style={s.error}>{error}</p>}
-          {success && <p style={s.successMsg}>✓ Information saved successfully</p>}
-
-          <button style={{ ...s.btn, opacity: saving ? 0.7 : 1 }} onClick={handleSave} disabled={saving}>
-            {saving ? "Saving..." : "Save Information"}
+          <button style={{ ...s.btn, opacity: savingProfile ? 0.7 : 1 }} onClick={handleSaveProfile} disabled={savingProfile}>
+            {savingProfile ? "Saving..." : "Save Profile"}
           </button>
+        </div>
+
+        <div style={s.divider} />
+
+        {/* Section 2: Student Verification */}
+        <div style={s.section}>
+          <p style={s.sectionTitle}>Student Verification</p>
+
+          {isComplete ? (
+            <div style={s.successBanner}>
+              <span>✓</span>
+              <div>
+                <p style={s.bannerTitle}>Verified — Ready for discounts</p>
+                <p style={s.bannerSub}>{studentInfo.edu_email}</p>
+              </div>
+            </div>
+          ) : (
+            <div style={s.warningBanner}>
+              <span>!</span>
+              <div>
+                <p style={s.bannerTitle}>Missing information</p>
+                <p style={s.bannerSub}>Complete your info to unlock discounts</p>
+              </div>
+            </div>
+          )}
+
+          <div style={s.form}>
+            <div style={s.field}>
+              <label style={s.label}>University Email</label>
+              <input
+                style={{ ...s.input, borderColor: eduEmail.length > 5 ? (emailValid ? "#00aa00" : "#d32f2f") : "#e0e0e0" }}
+                type="email" placeholder="student@alexu.edu.eg"
+                value={eduEmail} onChange={(e) => setEduEmail(e.target.value)} dir="ltr"
+              />
+              {eduEmail.length > 5 && (
+                <p style={{ fontSize: "12px", color: emailValid ? "#00aa00" : "#d32f2f", margin: "4px 0 0" }}>
+                  {emailValid ? "✓ Valid university email" : "✗ Not a university email, must end with .edu.eg"}
+                </p>
+              )}
+              <p style={s.hint}>The email issued by your university, not Gmail</p>
+            </div>
+
+            <div style={s.field}>
+              <label style={s.label}>University</label>
+              <select style={s.input} value={university} onChange={(e) => setUniversity(e.target.value)}>
+                <option value="">Select your university</option>
+                {ALEXANDRIA_UNIVERSITIES.map((u) => <option key={u} value={u}>{u}</option>)}
+              </select>
+            </div>
+
+            <div style={s.field}>
+              <label style={s.label}>Study Year</label>
+              <select style={s.input} value={studyYear} onChange={(e) => setStudyYear(e.target.value)}>
+                <option value="">Select your year</option>
+                {STUDY_YEARS.map((y) => <option key={y} value={y}>{y}</option>)}
+              </select>
+            </div>
+
+            {error && <p style={s.error}>{error}</p>}
+            {success && <p style={s.successMsg}>✓ Student info saved successfully</p>}
+
+            <button style={{ ...s.btn, opacity: saving ? 0.7 : 1 }} onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : "Save Student Info"}
+            </button>
+          </div>
         </div>
 
         <div style={s.infoBox}>
           <p style={s.infoTitle}>Why do we need a university email?</p>
           <p style={s.infoText}>Your university email proves you're a student so you can unlock Yawmi discounts. We will never send anything to this email.</p>
         </div>
+
       </div>
       <style>{css}</style>
     </div>
@@ -203,11 +313,14 @@ const s = {
   header: { display: "flex", alignItems: "center", gap: "16px", marginBottom: "24px" },
   backBtn: { background: "none", border: "1.5px solid #e0e0e0", borderRadius: "40px", padding: "8px 16px", fontSize: "13px", fontWeight: "600", cursor: "pointer", color: "#000" },
   title: { fontSize: "20px", fontWeight: "800", color: "#000", margin: 0 },
-  successBanner: { display: "flex", alignItems: "center", gap: "12px", background: "#f0fff4", border: "1.5px solid #00aa00", borderRadius: "20px", padding: "14px 18px", marginBottom: "24px", color: "#00aa00" },
-  warningBanner: { display: "flex", alignItems: "center", gap: "12px", background: "#fffbf0", border: "1.5px solid #f0a500", borderRadius: "20px", padding: "14px 18px", marginBottom: "24px", color: "#f0a500" },
+  section: { display: "flex", flexDirection: "column", gap: "16px" },
+  sectionTitle: { fontSize: "13px", fontWeight: "700", color: "#000", textTransform: "uppercase", letterSpacing: "0.08em", margin: 0 },
+  divider: { borderTop: "1px solid #f0f0f0", margin: "24px 0" },
+  successBanner: { display: "flex", alignItems: "center", gap: "12px", background: "#f0fff4", border: "1.5px solid #00aa00", borderRadius: "20px", padding: "14px 18px", color: "#00aa00" },
+  warningBanner: { display: "flex", alignItems: "center", gap: "12px", background: "#fffbf0", border: "1.5px solid #f0a500", borderRadius: "20px", padding: "14px 18px", color: "#f0a500" },
   bannerTitle: { fontSize: "14px", fontWeight: "700", margin: 0, color: "inherit" },
   bannerSub: { fontSize: "12px", margin: "2px 0 0", color: "inherit" },
-  form: { display: "flex", flexDirection: "column", gap: "20px" },
+  form: { display: "flex", flexDirection: "column", gap: "16px" },
   field: { display: "flex", flexDirection: "column", gap: "6px" },
   label: { fontSize: "14px", fontWeight: "600", color: "#000" },
   input: { width: "100%", padding: "13px 16px", border: "1.5px solid #e0e0e0", borderRadius: "20px", fontSize: "15px", fontFamily: "inherit", background: "#fff", outline: "none", color: "#000", boxSizing: "border-box", transition: "border-color 0.2s" },

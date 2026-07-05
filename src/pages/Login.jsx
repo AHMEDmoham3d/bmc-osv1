@@ -345,7 +345,8 @@ export default function Login() {
     setLoading(true);
     const { data } = await supabase.from("users").select("*").eq("phone", phone).maybeSingle();
     if (data) {
-      localStorage.setItem("phone", phone);
+      // Store only user_id in localStorage — all data fetched from Supabase
+      localStorage.setItem("user_id", data.id);
       navigate("/dashboard");
     } else {
       navigate("/register");
@@ -360,7 +361,7 @@ export default function Login() {
         <p style={s.sub}>Enter your mobile number</p>
         <input style={s.input} placeholder="01xxxxxxxxx" value={phone} onChange={e => setPhone(e.target.value)} />
         <button style={s.btn} onClick={handleLogin} disabled={loading}>
-          {loading ? "In progress...": "Entering"}
+          {loading ? "In progress..." : "Entering"}
         </button>
         <p style={s.hint}>Not registered? We will register you automatically</p>
       </div>

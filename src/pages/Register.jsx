@@ -44,17 +44,24 @@ export default function Register() {
         .eq("phone", phone.trim())
         .maybeSingle();
       if (fetchError && fetchError.code !== "PGRST116") throw new Error(fetchError.message);
+
       if (existing) {
-        localStorage.setItem("phone", phone.trim());
-        localStorage.setItem("name", existing.name);
+        // Existing user — store only user_id
+        localStorage.setItem("user_id", existing.id);
         navigate("/dashboard");
         return;
       }
-      const { error: insertError } = await supabase.from("users").insert({ name: name.trim(), phone: phone.trim() });
+
+      // New user — insert and store only user_id
+      const { data: inserted, error: insertError } = await supabase
+        .from("users")
+        .insert({ name: name.trim(), phone: phone.trim() })
+        .select()
+        .single();
       if (insertError) throw new Error(insertError.message);
-      localStorage.setItem("phone", phone.trim());
-      localStorage.setItem("name", name.trim());
-      navigate("/dashboard");
+
+      localStorage.setItem("user_id", inserted.id);
+      navigate("/settings");
     } catch (err) {
       setError((err && err.message) || "Something went wrong. Please try again.");
     } finally {
@@ -149,39 +156,13 @@ export default function Register() {
           to { opacity: 1; transform: translateY(0) scale(1); }
         }
         .logo-wrapper { text-align: center; margin-bottom: 12px; }
-        .yawmi-logo {
-          font-size: 56px;
-          font-weight: 900;
-          letter-spacing: -1.5px;
-          color: #000000;
-          display: inline-block;
-          line-height: 1;
-        }
-        .logo-underline {
-          width: 48px;
-          height: 3px;
-          background: #000000;
-          margin: 12px auto 0;
-          border-radius: 4px;
-          opacity: 0.3;
-          transition: width 0.2s ease;
-        }
+        .yawmi-logo { font-size: 56px; font-weight: 900; letter-spacing: -1.5px; color: #000000; display: inline-block; line-height: 1; }
+        .logo-underline { width: 48px; height: 3px; background: #000000; margin: 12px auto 0; border-radius: 4px; opacity: 0.3; transition: width 0.2s ease; }
         .register-card:hover .logo-underline { width: 72px; opacity: 0.6; }
         .subtitle { font-size: 15px; color: #5a5a5a; text-align: center; margin-bottom: 40px; font-weight: 450; }
         .form-group { margin-bottom: 24px; }
         .form-label { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 600; color: #000; margin-bottom: 8px; }
-        .form-input {
-          width: 100%;
-          padding: 14px 18px;
-          border: 1.5px solid #e0e0e0;
-          border-radius: 28px;
-          font-size: 16px;
-          font-family: inherit;
-          background: #ffffff;
-          transition: all 0.2s ease;
-          outline: none;
-          color: #000000;
-        }
+        .form-input { width: 100%; padding: 14px 18px; border: 1.5px solid #e0e0e0; border-radius: 28px; font-size: 16px; font-family: inherit; background: #ffffff; transition: all 0.2s ease; outline: none; color: #000000; }
         .form-input:focus { border-color: #000000; box-shadow: 0 0 0 2px rgba(0,0,0,0.05); }
         .form-input::placeholder { color: #b0b0b0; font-size: 14px; }
         .input-valid { border-color: #00aa00; }
@@ -189,44 +170,11 @@ export default function Register() {
         .phone-valid { font-size: 12px; color: #00aa00; margin-top: 4px; padding-left: 8px; }
         .phone-invalid { font-size: 12px; color: #d32f2f; margin-top: 4px; padding-left: 8px; }
         .phone-hint { font-size: 12px; color: #999; margin-top: 4px; padding-left: 8px; }
-        .error-message {
-          color: #d32f2f;
-          font-size: 13px;
-          margin: -8px 0 16px 0;
-          padding: 8px 14px;
-          background: #fff4f4;
-          border-radius: 40px;
-          border-left: 2px solid #d32f2f;
-        }
-        .submit-btn {
-          width: 100%;
-          padding: 14px 20px;
-          background: #000000;
-          color: #ffffff;
-          border: none;
-          border-radius: 60px;
-          font-size: 17px;
-          font-weight: 700;
-          cursor: pointer;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 12px;
-          transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1);
-          margin-top: 12px;
-          margin-bottom: 20px;
-          font-family: inherit;
-        }
+        .error-message { color: #d32f2f; font-size: 13px; margin: -8px 0 16px 0; padding: 8px 14px; background: #fff4f4; border-radius: 40px; border-left: 2px solid #d32f2f; }
+        .submit-btn { width: 100%; padding: 14px 20px; background: #000000; color: #ffffff; border: none; border-radius: 60px; font-size: 17px; font-weight: 700; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 12px; transition: all 0.25s cubic-bezier(0.23, 1, 0.32, 1); margin-top: 12px; margin-bottom: 20px; font-family: inherit; }
         .submit-btn:hover:not(:disabled) { transform: scale(0.97); background: #1c1c1c; box-shadow: 0 4px 12px rgba(0,0,0,0.1); }
         .submit-btn:disabled { opacity: 0.7; cursor: not-allowed; }
-        .loading-spinner {
-          width: 20px;
-          height: 20px;
-          border: 2px solid rgba(255,255,255,0.3);
-          border-top: 2px solid white;
-          border-radius: 50%;
-          animation: spin 0.8s linear infinite;
-        }
+        .loading-spinner { width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.3); border-top: 2px solid white; border-radius: 50%; animation: spin 0.8s linear infinite; }
         @keyframes spin { to { transform: rotate(360deg); } }
         .hint-text { text-align: center; font-size: 13px; color: #6a6a6a; margin-top: 8px; }
         .link-text { color: #000; font-weight: 700; cursor: pointer; border-bottom: 1px dashed #000; transition: all 0.2s; padding-bottom: 1px; }
